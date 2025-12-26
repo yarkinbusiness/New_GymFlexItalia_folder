@@ -5,43 +5,40 @@
 //  Created by Yarkin Yavuz on 11/14/25.
 //
 
-import SwiftUI
 import AuthenticationServices
+import SwiftUI
 
 /// Authentication view with sign in and sign up
 struct AuthView: View {
-    
     @StateObject private var viewModel = AuthViewModel()
     @State private var isSignUp = false
-    
+
     var body: some View {
         ZStack {
             AppGradients.background
                 .ignoresSafeArea()
-            
+
             // Floating glow orbs
             ZStack {
                 GlowingOrb(color: AppColors.brand, size: 320, offset: CGSize(width: -140, height: -220))
                 GlowingOrb(color: AppColors.accent, size: 260, offset: CGSize(width: 160, height: 120))
             }
             .opacity(0.5)
-            
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: Spacing.xl) {
-                    Spacer().frame(height: 60)
-                    authCard
-                    Spacer().frame(height: 40)
-                }
-                .padding(.horizontal, Spacing.xl)
-                .padding(.bottom, Spacing.xxl)
+
+            VStack(spacing: Spacing.xl) {
+                Spacer().frame(height: 60)
+                authCard
+                Spacer().frame(height: 40)
             }
-            
+            .padding(.horizontal, Spacing.xl)
+            .padding(.bottom, Spacing.xxl)
+
             if viewModel.isLoading {
                 LoadingOverlayView()
             }
         }
     }
-    
+
     private var authCard: some View {
         VStack(spacing: Spacing.lg) {
             VStack(spacing: Spacing.sm) {
@@ -53,20 +50,20 @@ struct AuthView: View {
                         Circle()
                             .fill(AppColors.brand.opacity(0.15))
                     )
-                
+
                 Text(isSignUp ? "Create Account" : "Welcome Back")
                     .font(AppFonts.h2)
                     .foregroundColor(AppColors.textHigh)
-                
+
                 Text(isSignUp ? "Join GymFlex to unlock premium gyms across Italy." :
-                        "Sign in to access your gym sessions")
+                    "Sign in to access your gym sessions")
                     .font(AppFonts.body)
                     .foregroundColor(AppColors.textDim)
             }
             .frame(maxWidth: .infinity)
-            
+
             AuthSegmentedControl(isSignUp: $isSignUp)
-            
+
             VStack(spacing: Spacing.md) {
                 if isSignUp {
                     GlassInputField(
@@ -76,7 +73,7 @@ struct AuthView: View {
                         textContentType: .name
                     )
                 }
-                
+
                 GlassInputField(
                     placeholder: "Email",
                     text: $viewModel.email,
@@ -85,7 +82,7 @@ struct AuthView: View {
                     textContentType: .emailAddress,
                     autocapitalization: .never
                 )
-                
+
                 GlassInputField(
                     placeholder: "Password",
                     text: $viewModel.password,
@@ -93,7 +90,7 @@ struct AuthView: View {
                     isSecure: true,
                     textContentType: isSignUp ? .newPassword : .password
                 )
-                
+
                 if isSignUp {
                     GlassInputField(
                         placeholder: "Confirm Password",
@@ -112,13 +109,13 @@ struct AuthView: View {
                     .padding(.top, Spacing.xs)
                 }
             }
-            
+
             if let error = viewModel.errorMessage {
                 ErrorBanner(message: error) {
                     viewModel.errorMessage = nil
                 }
             }
-            
+
             PrimaryGradientButton(
                 title: isSignUp ? "Create Account" : "Sign In",
                 isLoading: viewModel.isLoading
@@ -131,23 +128,23 @@ struct AuthView: View {
                     }
                 }
             }
-            
+
             DividerRow()
-            
+
             SignInWithAppleButton(.signIn) { request in
                 request.requestedScopes = [.fullName, .email]
             } onCompletion: { result in
                 switch result {
-                case .success(let authorization):
+                case let .success(authorization):
                     Task { await viewModel.signInWithApple(authorization) }
-                case .failure(let error):
+                case let .failure(error):
                     viewModel.errorMessage = error.localizedDescription
                 }
             }
             .signInWithAppleButtonStyle(.whiteOutline)
             .frame(height: 52)
             .clipShape(RoundedRectangle(cornerRadius: CornerRadii.md, style: .continuous))
-            
+
             HStack(spacing: Spacing.xs) {
                 Text(isSignUp ? "Already have an account?" : "Don't have an account?")
                     .font(AppFonts.bodySmall)
@@ -163,18 +160,18 @@ struct AuthView: View {
             .padding(.top, Spacing.sm)
         }
         .padding(Spacing.xl)
-        .glassBackground(cornerRadius: CornerRadii.xl, opacity: 0.45, blur: 30)
     }
 }
 
 // MARK: - Components
+
 // GlassInputField is now in Views/Shared/GlassInputField.swift
 
 private struct PrimaryGradientButton: View {
     let title: String
     var isLoading: Bool = false
     let action: () -> Void
-    
+
     var body: some View {
         Button(action: action) {
             HStack {
@@ -217,18 +214,18 @@ private struct DividerRow: View {
 private struct ErrorBanner: View {
     let message: String
     var dismiss: (() -> Void)?
-    
+
     var body: some View {
         HStack(alignment: .top, spacing: Spacing.sm) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundColor(AppColors.danger)
-            
+
             Text(message)
                 .font(AppFonts.bodySmall)
                 .foregroundColor(AppColors.textHigh)
-            
+
             Spacer()
-            
+
             if let dismiss {
                 Button(action: dismiss) {
                     Image(systemName: "xmark")
@@ -247,7 +244,7 @@ private struct ErrorBanner: View {
 
 private struct AuthSegmentedControl: View {
     @Binding var isSignUp: Bool
-    
+
     var body: some View {
         HStack(spacing: 4) {
             segmentButton(title: "Sign In", isActive: !isSignUp) {
@@ -263,7 +260,7 @@ private struct AuthSegmentedControl: View {
                 .fill(AppColors.card.opacity(0.6))
         )
     }
-    
+
     private func segmentButton(title: String, isActive: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
@@ -290,16 +287,16 @@ private struct GlowingOrb: View {
     let color: Color
     let size: CGFloat
     let offset: CGSize
-    
+
     @State private var animate = false
-    
+
     var body: some View {
         Circle()
             .fill(
                 RadialGradient(colors: [
                     color.opacity(0.5),
                     color.opacity(0.15),
-                    .clear
+                    .clear,
                 ], center: .center, startRadius: 0, endRadius: size / 2)
             )
             .frame(width: size, height: size)
@@ -315,4 +312,3 @@ private struct GlowingOrb: View {
     AuthView()
         .preferredColorScheme(.dark)
 }
-
