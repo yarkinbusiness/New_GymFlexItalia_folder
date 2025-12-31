@@ -1,0 +1,27 @@
+//
+//  DeepLink.swift
+//  Gym Flex Italia
+//
+//  Deep link types for app navigation from external sources
+//
+
+import Foundation
+
+/// Deep link destinations that can be triggered from notifications, URLs, or other external sources
+enum DeepLink: Hashable {
+    /// Navigate to gym discovery/booking screen
+    case bookSession
+    
+    /// Navigate to wallet screen
+    case wallet
+    
+    /// Navigate to a specific wallet transaction
+    case walletTransaction(String)
+    
+    /// Navigate to edit profile screen
+    case editProfile
+    
+    /// Navigate to settings screen
+    case settings
+}
+

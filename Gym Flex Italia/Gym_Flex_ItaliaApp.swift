@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UserNotifications
 
 @main
 struct Gym_Flex_ItaliaApp: App {
@@ -21,6 +22,12 @@ struct Gym_Flex_ItaliaApp: App {
     
     // Settings store (persists to UserDefaults)
     @StateObject private var settingsStore = SettingsStore()
+    
+    // Deep link queue for buffering links during cold start
+    @StateObject private var deepLinkQueue = DeepLinkQueue()
+    
+    // Notification action handler (kept alive for delegate callbacks)
+    private let notificationHandler = NotificationActionHandler()
     
     // Dependency injection container (uses mock services for now)
     private let appContainer = AppContainer.demo()
@@ -40,12 +47,15 @@ struct Gym_Flex_ItaliaApp: App {
                 .environmentObject(bookingManager)
                 .environmentObject(router)
                 .environmentObject(settingsStore)
+                .environmentObject(deepLinkQueue)
                 .preferredColorScheme(settingsStore.preferredColorScheme)
                 .onAppear {
                     // Request location permission
                     locationService.requestLocationPermission()
                     // Sync appearance with settings
                     syncAppearanceWithSettings()
+                    // Wire up notification action handler
+                    setupNotificationHandler()
                 }
         }
     }
@@ -75,5 +85,18 @@ struct Gym_Flex_ItaliaApp: App {
             // System mode - preferredColorScheme(nil) handles this
             break
         }
+    }
+    
+    private func setupNotificationHandler() {
+        // Set up deep link callback to enqueue for deferred processing
+        // This ensures deep links work even on cold start before UI is ready
+        notificationHandler.onDeepLink = { [weak deepLinkQueue] deepLink in
+            DispatchQueue.main.async {
+                deepLinkQueue?.enqueue(deepLink)
+            }
+        }
+        
+        // Set as notification center delegate
+        UNUserNotificationCenter.current().delegate = notificationHandler
     }
 }

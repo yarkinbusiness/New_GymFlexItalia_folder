@@ -35,6 +35,7 @@ struct RootNavigationView: View {
         .environmentObject(AppearanceManager.shared)
         .environmentObject(BookingManager.shared)
         .environmentObject(SettingsStore())
+        .environmentObject(DeepLinkQueue())
         .environment(\.appContainer, .demo())
 }
 

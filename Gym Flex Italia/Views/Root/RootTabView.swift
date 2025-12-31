@@ -12,6 +12,7 @@ struct RootTabView: View {
     
     @EnvironmentObject var router: AppRouter
     @EnvironmentObject var appearanceManager: AppearanceManager
+    @EnvironmentObject var deepLinkQueue: DeepLinkQueue
     @Environment(\.appContainer) private var appContainer
     
     enum Tab: String, CaseIterable {
@@ -75,8 +76,25 @@ struct RootTabView: View {
                     WalletFullView()
                 case .walletTransactionDetail(let transactionId):
                     TransactionDetailView(transactionId: transactionId)
+                case .deepLinkSimulator:
+                    DeepLinkSimulatorView()
                 }
             }
+            .task {
+                // Consume any pending deep links (e.g., from cold start notification)
+                consumePendingDeepLinks()
+            }
+            .onChange(of: deepLinkQueue.pending.count) { _, _ in
+                // Also consume when new deep links are enqueued while app is running
+                consumePendingDeepLinks()
+            }
+        }
+    }
+    
+    /// Processes all pending deep links from the queue
+    private func consumePendingDeepLinks() {
+        while let link = deepLinkQueue.dequeue() {
+            router.handle(deepLink: link)
         }
     }
 }
@@ -200,5 +218,7 @@ struct CustomTabBar: View {
         .environmentObject(AppearanceManager.shared)
         .environmentObject(BookingManager.shared)
         .environmentObject(SettingsStore())
+        .environmentObject(DeepLinkQueue())
         .environment(\.appContainer, .demo())
 }
+

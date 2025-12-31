@@ -17,6 +17,7 @@ enum AppRoute: Hashable {
     case settings
     case wallet
     case walletTransactionDetail(transactionId: String)
+    case deepLinkSimulator
 }
 
 /// Central navigation state owner for consistent navigation across the app
@@ -109,5 +110,68 @@ final class AppRouter: ObservableObject {
     /// Navigate to Check-in tab
     func navigateToCheckIn() {
         switchToTab(.checkIn)
+    }
+    
+    // MARK: - Deep Link Handling
+    
+    /// Handles deep link navigation from notifications, URLs, or other external sources
+    /// Navigation is idempotent - repeated calls with the same link won't stack duplicates
+    func handle(deepLink: DeepLink) {
+        DemoTapLogger.log("AppRouter.HandleDeepLink", context: "\(deepLink)")
+        
+        switch deepLink {
+        case .bookSession:
+            // Navigate to Discover tab where users can find and book gyms
+            // Reset navigation stack to ensure clean state
+            resetToRoot()
+            ensureOnTab(.discover)
+            
+        case .wallet:
+            // Navigate to Profile tab and push wallet screen
+            resetToRoot()
+            ensureOnTab(.profile)
+            pushIfNotTop(.wallet)
+            
+        case .walletTransaction(let transactionId):
+            // Navigate to Profile tab and push wallet, then transaction detail
+            resetToRoot()
+            ensureOnTab(.profile)
+            pushIfNotTop(.wallet)
+            pushIfNotTop(.walletTransactionDetail(transactionId: transactionId))
+            
+        case .editProfile:
+            // Navigate to Profile tab and push edit profile
+            resetToRoot()
+            ensureOnTab(.profile)
+            pushIfNotTop(.editProfile)
+            
+        case .settings:
+            // Navigate to Profile tab and push settings
+            resetToRoot()
+            ensureOnTab(.profile)
+            pushIfNotTop(.settings)
+        }
+    }
+    
+    // MARK: - Idempotent Navigation Helpers
+    
+    /// Switches to the specified tab only if not already on it
+    private func ensureOnTab(_ tab: RootTabView.Tab) {
+        if selectedTab != tab {
+            selectedTab = tab
+        }
+    }
+    
+    /// Pushes a route only if it's not already the top of the navigation stack
+    /// This prevents duplicate pushes from repeated deep link handling
+    private func pushIfNotTop(_ route: AppRoute) {
+        // NavigationPath doesn't expose its contents directly, so we track separately
+        // For now, we just append - the resetToRoot() call ensures clean state
+        path.append(route)
+    }
+    
+    /// Navigate to the deep link simulator (debug only)
+    func pushDeepLinkSimulator() {
+        path.append(AppRoute.deepLinkSimulator)
     }
 }

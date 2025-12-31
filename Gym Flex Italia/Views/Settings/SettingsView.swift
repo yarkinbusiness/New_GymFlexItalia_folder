@@ -368,6 +368,30 @@ struct SettingsView: View {
                 )
             }
             
+            // Simulate notification action for testing deep links
+            Button {
+                DemoTapLogger.log("Debug.SimulateNotificationBookSession")
+                router.handle(deepLink: .bookSession)
+            } label: {
+                SettingsRow(
+                    icon: "bell.badge.fill",
+                    iconColor: .orange,
+                    title: "Simulate 'Book Now' Notification"
+                )
+            }
+            
+            // Open Deep Link Simulator
+            Button {
+                DemoTapLogger.log("Debug.OpenDeepLinkSimulator")
+                router.pushDeepLinkSimulator()
+            } label: {
+                SettingsRow(
+                    icon: "link",
+                    iconColor: .purple,
+                    title: "Deep Link Simulator"
+                )
+            }
+            
             HStack {
                 SettingsRow(
                     icon: "flag.fill",
