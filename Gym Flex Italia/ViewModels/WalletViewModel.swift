@@ -1,205 +1,134 @@
 //
-//  WalletViewModel.swift
+//  WalletFullViewModel.swift
 //  Gym Flex Italia
 //
-//  Created by Yarkin Yavuz on 11/16/25.
+//  ViewModel for the complete wallet screen with balance and transactions
 //
 
 import Foundation
 import Combine
-import PassKit
 
-/// ViewModel for wallet management and top-up
+/// ViewModel for the wallet screen
 @MainActor
-final class WalletViewModel: ObservableObject {
+final class WalletFullViewModel: ObservableObject {
     
-    // Use shared wallet store for balance - observe it directly
-    var balance: Double {
-        walletStore.balance
-    }
+    // MARK: - Published Properties
     
+    /// Loading state
     @Published var isLoading = false
+    
+    /// Error message (nil if no error)
     @Published var errorMessage: String?
-    @Published var successMessage: String?
     
-    // Top-up state
-    @Published var selectedAmount: Double?
-    @Published var customAmount: String = ""
-    @Published var selectedPaymentMethod: PaymentMethod = .applePay
-    @Published var isProcessingPayment = false
+    /// Success message after top-up
+    @Published var topUpSuccessMessage: String?
     
-    // Card payment form state
-    @Published var cardNumber: String = ""
-    @Published var cardExpiry: String = ""
-    @Published var cardCVV: String = ""
-    @Published var cardholderName: String = ""
+    /// Current wallet balance
+    @Published var balance: WalletBalance?
     
-    // Apple Pay
-    @Published var canUseApplePay: Bool = false
+    /// List of transactions
+    @Published var transactions: [WalletTransaction] = []
     
-    private let walletService = WalletService.shared
-    private let walletStore = WalletStore.shared
-    private var cancellables = Set<AnyCancellable>()
+    /// Is top-up in progress
+    @Published var isTopUpLoading = false
     
-    // Predefined top-up amounts
-    let predefinedAmounts: [Double] = [10.0, 25.0, 50.0, 100.0]
+    // MARK: - Public Methods
     
-    init() {
-        checkApplePayAvailability()
-        loadBalance()
-        
-        // Observe wallet store changes to trigger view updates
-        walletStore.objectWillChange
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
-    }
-    
-    // MARK: - Load Balance
-    func loadBalance() {
-        Task {
-            isLoading = true
-            errorMessage = nil
-            
-            // Load balance through shared store
-            await walletStore.loadBalance()
-            
-            isLoading = false
-        }
-    }
-    
-    // MARK: - Apple Pay
-    func checkApplePayAvailability() {
-        canUseApplePay = PKPaymentAuthorizationController.canMakePayments()
-    }
-    
-    var topUpAmount: Double {
-        if let selected = selectedAmount {
-            return selected
-        } else if !customAmount.isEmpty, let custom = Double(customAmount) {
-            return custom
-        }
-        return 0
-    }
-    
-    var isValidAmount: Bool {
-        topUpAmount >= 5.0 && topUpAmount <= 1000.0
-    }
-    
-    // MARK: - Top-Up
-    func processTopUp() async {
-        guard isValidAmount else {
-            errorMessage = "Amount must be between €5 and €1000"
-            return
-        }
-        
-        isProcessingPayment = true
+    /// Loads balance and transactions
+    func load(using service: WalletServiceProtocol) async {
+        isLoading = true
         errorMessage = nil
-        successMessage = nil
         
         do {
-            // Mock payment processing for now
-            // In production, this would:
-            // 1. Process payment with Apple Pay or card
-            // 2. Call walletService.addFunds()
-            // 3. Update balance
+            // Fetch balance and transactions in parallel
+            async let balanceTask = service.fetchBalance()
+            async let transactionsTask = service.fetchTransactions()
             
-            try await Task.sleep(nanoseconds: 1_500_000_000) // Simulate payment processing
+            let (fetchedBalance, fetchedTransactions) = try await (balanceTask, transactionsTask)
             
-            // Mock successful top-up
-            if FeatureFlags.shared.isDemoMode {
-                // Simulate adding funds - update shared store
-                walletStore.addFunds(topUpAmount)
-                successMessage = "Successfully added €\(String(format: "%.2f", topUpAmount)) to your wallet!"
-            } else {
-                let transaction = try await walletService.addFunds(
-                    amount: topUpAmount,
-                    paymentMethod: selectedPaymentMethod
-                )
-                // Update shared store with new balance
-                walletStore.updateBalance(transaction.balanceAfter)
-                successMessage = "Successfully added €\(String(format: "%.2f", topUpAmount)) to your wallet!"
-            }
-            
-            // Reset form
-            selectedAmount = nil
-            customAmount = ""
-            cardNumber = ""
-            cardExpiry = ""
-            cardCVV = ""
-            cardholderName = ""
+            balance = fetchedBalance
+            transactions = fetchedTransactions
             
         } catch {
-            errorMessage = "Payment failed: \(error.localizedDescription)"
+            errorMessage = error.localizedDescription
         }
         
-        isProcessingPayment = false
+        isLoading = false
     }
     
-    // MARK: - Apple Pay Payment Request
-    @MainActor
-    func createApplePayRequest() -> PKPaymentRequest {
-        let request = PKPaymentRequest()
-        request.merchantIdentifier = "merchant.com.gymflex.italia" // Replace with real merchant ID
-        request.supportedNetworks = [.visa, .masterCard, .amex]
-        request.merchantCapabilities = .capability3DS
-        request.countryCode = "IT"
-        request.currencyCode = "EUR"
+    /// Refreshes only the balance and transactions (quick refresh)
+    func refresh(using service: WalletServiceProtocol) async {
+        errorMessage = nil
         
-        // Payment summary
-        let paymentSummaryItem = PKPaymentSummaryItem(
-            label: "GymFlex Italia Wallet Top-Up",
-            amount: NSDecimalNumber(value: topUpAmount)
-        )
-        request.paymentSummaryItems = [paymentSummaryItem]
-        
-        return request
+        do {
+            async let balanceTask = service.fetchBalance()
+            async let transactionsTask = service.fetchTransactions()
+            
+            let (fetchedBalance, fetchedTransactions) = try await (balanceTask, transactionsTask)
+            
+            balance = fetchedBalance
+            transactions = fetchedTransactions
+            
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
     
-    // MARK: - Card Validation
-    var isCardFormValid: Bool {
-        guard !cardNumber.isEmpty,
-              !cardExpiry.isEmpty,
-              !cardCVV.isEmpty,
-              !cardholderName.isEmpty else {
+    /// Tops up the wallet
+    /// - Parameter amountCents: Amount in cents
+    func topUp(amountCents: Int, using service: WalletServiceProtocol) async -> Bool {
+        isTopUpLoading = true
+        errorMessage = nil
+        topUpSuccessMessage = nil
+        
+        do {
+            let transaction = try await service.topUp(amountCents: amountCents)
+            
+            // Update balance
+            let newBalance = Int(transaction.balanceAfter * 100)
+            balance = WalletBalance.eur(cents: newBalance)
+            
+            // Add transaction to the list
+            transactions.insert(transaction, at: 0)
+            
+            // Show success message
+            let formattedAmount = String(format: "%.2f", Double(amountCents) / 100.0)
+            topUpSuccessMessage = "Successfully added €\(formattedAmount) to your wallet!"
+            
+            isTopUpLoading = false
+            return true
+            
+        } catch {
+            errorMessage = error.localizedDescription
+            isTopUpLoading = false
             return false
         }
-        
-        // Basic validation (in production, use proper card validation library)
-        let cleanedCardNumber = cardNumber.replacingOccurrences(of: " ", with: "")
-        return cleanedCardNumber.count >= 13 && cleanedCardNumber.count <= 19 &&
-               cardExpiry.count == 5 && // MM/YY format
-               cardCVV.count >= 3 && cardCVV.count <= 4
     }
     
-    // MARK: - Formatting Helpers
-    func formatCardNumber(_ text: String) -> String {
-        let cleaned = text.replacingOccurrences(of: " ", with: "")
-        var formatted = ""
-        
-        for (index, char) in cleaned.enumerated() {
-            if index > 0 && index % 4 == 0 {
-                formatted += " "
-            }
-            formatted.append(char)
-        }
-        
-        return String(formatted.prefix(19)) // Max 16 digits + 3 spaces
+    /// Clears error message
+    func clearError() {
+        errorMessage = nil
     }
     
-    func formatExpiry(_ text: String) -> String {
-        let cleaned = text.replacingOccurrences(of: "/", with: "")
-        var formatted = ""
-        
-        for (index, char) in cleaned.enumerated() {
-            if index == 2 {
-                formatted += "/"
-            }
-            formatted.append(char)
-        }
-        
-        return String(formatted.prefix(5)) // MM/YY format
+    /// Clears success message
+    func clearSuccess() {
+        topUpSuccessMessage = nil
+    }
+    
+    /// Gets a transaction by ID
+    func transaction(for id: String) -> WalletTransaction? {
+        transactions.first { $0.id == id }
+    }
+    
+    // MARK: - Computed Properties
+    
+    /// Formatted balance string
+    var formattedBalance: String {
+        balance?.formattedBalance ?? "€0.00"
+    }
+    
+    /// Whether we have any transactions
+    var hasTransactions: Bool {
+        !transactions.isEmpty
     }
 }
-

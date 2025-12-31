@@ -18,6 +18,7 @@ final class GymDetailViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var showBookingForm = false
+    @Published var bookingConfirmation: BookingConfirmation?
     
     private let gymsService = GymsService.shared
     private let locationService = LocationService.shared
@@ -34,6 +35,43 @@ final class GymDetailViewModel: ObservableObject {
         }
         
         isLoading = false
+    }
+    
+    /// Load gym using injected service (preferred for production)
+    func loadGym(gymId: String, using service: GymServiceProtocol) async {
+        isLoading = true
+        errorMessage = nil
+        bookingConfirmation = nil
+        
+        do {
+            gym = try await service.fetchGymDetail(id: gymId)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        
+        isLoading = false
+    }
+    
+    /// Book the current gym using injected service
+    func bookGym(date: Date, duration: Int, using service: BookingServiceProtocol) async -> Bool {
+        guard let gymId = gym?.id else {
+            errorMessage = "No gym selected"
+            return false
+        }
+        
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            let confirmation = try await service.createBooking(gymId: gymId, date: date, duration: duration)
+            bookingConfirmation = confirmation
+            isLoading = false
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false
+            return false
+        }
     }
     
     // MARK: - Distance

@@ -86,6 +86,33 @@ final class GymDiscoveryViewModel: ObservableObject {
         isLoading = false
     }
     
+    /// Load gyms using injected service (preferred for production)
+    /// - Parameter service: The gym service to use for fetching data
+    func loadGyms(using service: GymServiceProtocol) async {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            gyms = try await service.fetchGyms()
+            filteredGyms = gyms
+            
+            // Center map on user location or Rome center
+            if let userLocation = locationService.currentLocation {
+                updateMapRegion(for: userLocation.coordinate)
+            } else {
+                let romeCenter = CLLocationCoordinate2D(latitude: 41.9028, longitude: 12.4964)
+                updateMapRegion(for: romeCenter)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+            // Fallback to mock data on error
+            gyms = mockDataProvider.generateRomeGyms()
+            filteredGyms = gyms
+        }
+        
+        isLoading = false
+    }
+    
     // MARK: - Search
     func search() async {
         guard !searchQuery.isEmpty else {

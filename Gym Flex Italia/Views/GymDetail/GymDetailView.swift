@@ -13,6 +13,8 @@ struct GymDetailView: View {
     let gymId: String
     @StateObject private var viewModel = GymDetailViewModel()
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appContainer) private var appContainer
+    @State private var showConfirmationAlert = false
     
     var body: some View {
         ScrollView {
@@ -22,6 +24,16 @@ struct GymDetailView: View {
                     coverImage
                     
                     VStack(alignment: .leading, spacing: 16) {
+                        // Booking confirmation banner (if present)
+                        if let confirmation = viewModel.bookingConfirmation {
+                            bookingConfirmationBanner(confirmation)
+                        }
+                        
+                        // Error banner (if present)
+                        if let error = viewModel.errorMessage {
+                            errorBanner(error)
+                        }
+                        
                         // Header
                         headerSection(gym: gym)
                         
@@ -41,52 +53,131 @@ struct GymDetailView: View {
                         // Equipment
                         equipmentSection(gym: gym)
                         
-                        // Book button
-                        PrimaryButton("Book Now", icon: "calendar.badge.plus") {
-                            viewModel.showBookingForm = true
-                        }
-                        .confirmationDialog("Select Duration", isPresented: $viewModel.showBookingForm, titleVisibility: .visible) {
-                            Button("1 Hour - €\(String(format: "%.2f", (gym.pricePerHour)))") {
-                                Task {
-                                    if await viewModel.createBooking(duration: 60) {
-                                        dismiss()
+                        // Book button (hide if already booked)
+                        if viewModel.bookingConfirmation == nil {
+                            PrimaryButton("Book Now", icon: "calendar.badge.plus") {
+                                DemoTapLogger.log("GymDetail.BookNow")
+                                viewModel.showBookingForm = true
+                            }
+                            .confirmationDialog("Select Duration", isPresented: $viewModel.showBookingForm, titleVisibility: .visible) {
+                                Button("1 Hour - €\(String(format: "%.2f", (gym.pricePerHour)))") {
+                                    DemoTapLogger.log("GymDetail.Book1Hour", context: "gymId: \(gym.id)")
+                                    Task {
+                                        if await viewModel.bookGym(date: Date(), duration: 60, using: appContainer.bookingService) {
+                                            showConfirmationAlert = true
+                                        }
                                     }
                                 }
-                            }
-                            Button("1.5 Hours - €\(String(format: "%.2f", (gym.pricePerHour * 1.5)))") {
-                                Task {
-                                    if await viewModel.createBooking(duration: 90) {
-                                        dismiss()
+                                Button("1.5 Hours - €\(String(format: "%.2f", (gym.pricePerHour * 1.5)))") {
+                                    DemoTapLogger.log("GymDetail.Book1.5Hours", context: "gymId: \(gym.id)")
+                                    Task {
+                                        if await viewModel.bookGym(date: Date(), duration: 90, using: appContainer.bookingService) {
+                                            showConfirmationAlert = true
+                                        }
                                     }
                                 }
-                            }
-                            Button("2 Hours - €\(String(format: "%.2f", (gym.pricePerHour * 2)))") {
-                                Task {
-                                    if await viewModel.createBooking(duration: 120) {
-                                        dismiss()
+                                Button("2 Hours - €\(String(format: "%.2f", (gym.pricePerHour * 2)))") {
+                                    DemoTapLogger.log("GymDetail.Book2Hours", context: "gymId: \(gym.id)")
+                                    Task {
+                                        if await viewModel.bookGym(date: Date(), duration: 120, using: appContainer.bookingService) {
+                                            showConfirmationAlert = true
+                                        }
                                     }
                                 }
+                                Button("Cancel", role: .cancel) {}
                             }
-                            Button("Cancel", role: .cancel) {}
                         }
                     }
                     .padding()
                 }
             } else if viewModel.isLoading {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack {
+                    Spacer()
+                    ProgressView("Loading gym...")
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, minHeight: 300)
             } else if let error = viewModel.errorMessage {
                 ErrorStateView(message: error) {
                     Task {
-                        await viewModel.loadGym(gymId: gymId)
+                        await viewModel.loadGym(gymId: gymId, using: appContainer.gymService)
                     }
                 }
             }
         }
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            await viewModel.loadGym(gymId: gymId)
+            await viewModel.loadGym(gymId: gymId, using: appContainer.gymService)
         }
+        .alert("Booking Confirmed!", isPresented: $showConfirmationAlert) {
+            Button("OK") { }
+        } message: {
+            if let confirmation = viewModel.bookingConfirmation {
+                Text("Reference: \(confirmation.referenceCode)\n\nYou're all set! Show this code at the gym.")
+            }
+        }
+    }
+    
+    // MARK: - Booking Confirmation Banner
+    private func bookingConfirmationBanner(_ confirmation: BookingConfirmation) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            HStack {
+                Image(systemName: "checkmark.seal.fill")
+                    .foregroundColor(.green)
+                Text("Booking Confirmed")
+                    .font(AppFonts.h5)
+                    .foregroundColor(.green)
+                Spacer()
+            }
+            
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Reference Code")
+                        .font(AppFonts.caption)
+                        .foregroundColor(AppColors.textDim)
+                    Text(confirmation.referenceCode)
+                        .font(.system(size: 20, weight: .bold, design: .monospaced))
+                        .foregroundColor(AppColors.textHigh)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("Duration")
+                        .font(AppFonts.caption)
+                        .foregroundColor(AppColors.textDim)
+                    Text("\(confirmation.duration) min")
+                        .font(AppFonts.body)
+                        .foregroundColor(AppColors.textHigh)
+                }
+            }
+            
+            Text("Total: €\(String(format: "%.2f", confirmation.totalPrice))")
+                .font(AppFonts.bodySmall)
+                .foregroundColor(AppColors.textDim)
+        }
+        .padding(Spacing.md)
+        .background(Color.green.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: CornerRadii.md))
+    }
+    
+    // MARK: - Error Banner
+    private func errorBanner(_ message: String) -> some View {
+        HStack {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.orange)
+            Text(message)
+                .font(AppFonts.bodySmall)
+                .foregroundColor(AppColors.textHigh)
+            Spacer()
+            Button {
+                viewModel.errorMessage = nil
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundColor(AppColors.textDim)
+            }
+        }
+        .padding(Spacing.md)
+        .background(Color.orange.opacity(0.15))
+        .clipShape(RoundedRectangle(cornerRadius: CornerRadii.md))
     }
     
     // MARK: - Cover Image
@@ -213,7 +304,8 @@ struct QuickInfoItem: View {
 
 #Preview {
     NavigationStack {
-        GymDetailView(gymId: "1")
+        GymDetailView(gymId: "gym_1")
     }
+    .environment(\.appContainer, .demo())
 }
 

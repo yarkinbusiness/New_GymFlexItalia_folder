@@ -10,7 +10,7 @@ import SwiftUI
 /// Root navigation coordinator
 struct RootNavigationView: View {
     
-    @StateObject private var authService = AuthService.shared
+    @EnvironmentObject var authService: AuthService
     
     var body: some View {
         Group {
@@ -29,5 +29,12 @@ struct RootNavigationView: View {
 
 #Preview {
     RootNavigationView()
+        .environmentObject(AppRouter())
+        .environmentObject(AuthService.shared)
+        .environmentObject(LocationService.shared)
+        .environmentObject(AppearanceManager.shared)
+        .environmentObject(BookingManager.shared)
+        .environmentObject(SettingsStore())
+        .environment(\.appContainer, .demo())
 }
 

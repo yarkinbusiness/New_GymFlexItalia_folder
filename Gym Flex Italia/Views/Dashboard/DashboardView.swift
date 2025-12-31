@@ -11,6 +11,7 @@ import SwiftUI
 struct DashboardView: View {
     
     @StateObject private var viewModel = DashboardViewModel()
+    @EnvironmentObject var router: AppRouter
     @State private var showWallet = false
     
     var body: some View {
@@ -28,7 +29,8 @@ struct DashboardView: View {
                     if let activeBooking = viewModel.activeBooking {
                         ActiveSessionSummaryCard(booking: activeBooking) {
                             // Switch to Check-in tab
-                            TabManager.shared.switchTo(.checkIn)
+                            DemoTapLogger.log("Dashboard.ActiveSession")
+                            router.switchToTab(.checkIn)
                         }
                     } else {
                         quickBookSection
@@ -55,9 +57,7 @@ struct DashboardView: View {
         .task {
             await viewModel.loadDashboard()
         }
-        .sheet(isPresented: $showWallet) {
-            WalletView()
-        }
+        // WalletView is now navigated via router
     }
     
     // MARK: - Header Section
@@ -78,12 +78,14 @@ struct DashboardView: View {
                 
                 // Wallet Button
                 WalletButtonView {
-                    showWallet = true
+                    DemoTapLogger.log("Dashboard.Wallet")
+                    router.pushWallet()
                 }
                 
                 // Settings Button
                 Button {
-                    // Show settings
+                    DemoTapLogger.log("Dashboard.Settings")
+                    router.pushSettings()
                 } label: {
                     Image(systemName: "dumbbell.fill")
                         .font(.system(size: 18))
@@ -119,9 +121,10 @@ struct DashboardView: View {
                     lastPrice: "€4.00"
                 ) {
                     Task {
+                        DemoTapLogger.log("Dashboard.QuickBook1Hour")
                         if let _ = await viewModel.createBooking(gymId: "gym_001", duration: 60) {
                             // Successfully created booking, navigate to Check-in tab
-                            TabManager.shared.switchTo(.checkIn)
+                            router.switchToTab(.checkIn)
                         }
                     }
                 }
@@ -135,9 +138,10 @@ struct DashboardView: View {
                     lastPrice: "€4.00"
                 ) {
                     Task {
+                        DemoTapLogger.log("Dashboard.QuickBook1.5Hours")
                         if let _ = await viewModel.createBooking(gymId: "gym_001", duration: 90) {
                             // Successfully created booking, navigate to Check-in tab
-                            TabManager.shared.switchTo(.checkIn)
+                            router.switchToTab(.checkIn)
                         }
                     }
                 }
@@ -151,9 +155,10 @@ struct DashboardView: View {
                     lastPrice: "€4.00"
                 ) {
                     Task {
+                        DemoTapLogger.log("Dashboard.QuickBook2Hours")
                         if let _ = await viewModel.createBooking(gymId: "gym_001", duration: 120) {
                             // Successfully created booking, navigate to Check-in tab
-                            TabManager.shared.switchTo(.checkIn)
+                            router.switchToTab(.checkIn)
                         }
                     }
                 }
@@ -172,7 +177,8 @@ struct DashboardView: View {
                 Spacer()
                 
                 Button("See All") {
-                    TabManager.shared.switchTo(.discover)
+                    DemoTapLogger.log("Dashboard.SeeAllGyms")
+                    router.switchToTab(.discover)
                 }
                 .font(AppFonts.bodySmall)
                 .foregroundColor(AppColors.brand)
@@ -224,7 +230,8 @@ struct DashboardView: View {
                 Spacer()
                 
 Button("See All") {
-                    TabManager.shared.switchTo(.profile)
+                    DemoTapLogger.log("Dashboard.SeeAllActivity")
+                    router.switchToTab(.profile)
                 }
                 .font(AppFonts.bodySmall)
                 .foregroundColor(AppColors.brand)
@@ -379,4 +386,6 @@ struct QuickBookCard: View {
 
 #Preview {
     DashboardView()
+        .environmentObject(AppRouter())
+        .environment(\.appContainer, .demo())
 }

@@ -13,6 +13,14 @@ struct ProfileView: View {
     @StateObject private var viewModel = ProfileViewModel()
     @StateObject private var authService = AuthService.shared
     @EnvironmentObject var appearanceManager: AppearanceManager
+    @EnvironmentObject var router: AppRouter
+    
+    // State for button action feedback
+    @State private var showEditAvatarSheet = false
+    @State private var showUpdateGoalsSheet = false
+    @State private var showAddPaymentSheet = false
+    @State private var showActionAlert = false
+    @State private var actionAlertMessage = ""
     
     var body: some View {
         ZStack {
@@ -50,6 +58,15 @@ struct ProfileView: View {
                 await viewModel.refresh()
             }
         }
+        .sheet(isPresented: $showEditAvatarSheet) {
+            SheetPlaceholderView(title: "Edit Avatar", message: "Avatar customization coming soon!")
+        }
+        .sheet(isPresented: $showUpdateGoalsSheet) {
+            SheetPlaceholderView(title: "Update Goals", message: "Goal setting feature coming soon!")
+        }
+        .sheet(isPresented: $showAddPaymentSheet) {
+            SheetPlaceholderView(title: "Add Payment", message: "Payment methods coming soon!")
+        }
     }
     
     // MARK: - Appearance Section
@@ -72,6 +89,7 @@ struct ProfileView: View {
             }
             
             Button {
+                DemoTapLogger.log("Profile.ToggleAppearance")
                 appearanceManager.toggleAppearance()
             } label: {
                 HStack {
@@ -124,7 +142,8 @@ struct ProfileView: View {
                 
                 // Edit Badge
                 Button {
-                    // Edit avatar
+                    DemoTapLogger.log("Profile.EditAvatarBadge")
+                    showEditAvatarSheet = true
                 } label: {
                     ZStack {
                         Circle()
@@ -152,7 +171,8 @@ struct ProfileView: View {
             // Action Buttons
             HStack(spacing: Spacing.md) {
                 Button {
-                    // Edit avatar
+                    DemoTapLogger.log("Profile.EditAvatar")
+                    showEditAvatarSheet = true
                 } label: {
                     Text("Edit Avatar")
                         .font(AppFonts.bodySmall)
@@ -164,7 +184,8 @@ struct ProfileView: View {
                 }
                 
                 Button {
-                    // Update goals
+                    DemoTapLogger.log("Profile.UpdateGoals")
+                    showUpdateGoalsSheet = true
                 } label: {
                     Text("Update Goals")
                         .font(AppFonts.bodySmall)
@@ -269,7 +290,8 @@ struct ProfileView: View {
                 Spacer()
                 
                 Button {
-                    // Edit
+                    DemoTapLogger.log("Profile.EditPersonalInfo")
+                    router.pushEditProfile()
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "gearshape")
@@ -365,7 +387,8 @@ struct ProfileView: View {
             .cornerRadius(CornerRadii.md)
             
             Button {
-                // Add payment method
+                DemoTapLogger.log("Profile.AddPaymentMethod")
+                showAddPaymentSheet = true
             } label: {
                 Text("+ Add Payment Method")
                     .font(AppFonts.bodySmall)
@@ -527,6 +550,59 @@ struct BookingHistoryRow: View {
     }
 }
 
+// MARK: - Sheet Placeholder View
+struct SheetPlaceholderView: View {
+    let title: String
+    let message: String
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: Spacing.xl) {
+                Image(systemName: "wrench.and.screwdriver")
+                    .font(.system(size: 60))
+                    .foregroundColor(AppColors.brand)
+                
+                Text(title)
+                    .font(AppFonts.h2)
+                
+                Text(message)
+                    .font(AppFonts.body)
+                    .foregroundColor(AppColors.textDim)
+                    .multilineTextAlignment(.center)
+                
+                Button {
+                    DemoTapLogger.log("Sheet.Done")
+                    dismiss()
+                } label: {
+                    Text("Done")
+                        .font(AppFonts.label)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(AppGradients.primary)
+                        .clipShape(RoundedRectangle(cornerRadius: CornerRadii.md))
+                }
+                .padding(.horizontal, Spacing.xl)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(.systemBackground))
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Close") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
 #Preview {
     ProfileView()
+        .environmentObject(AppRouter())
+        .environmentObject(AppearanceManager.shared)
+        .environment(\.appContainer, .demo())
 }

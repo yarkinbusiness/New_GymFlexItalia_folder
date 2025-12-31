@@ -11,6 +11,7 @@ import SwiftUI
 struct GroupsView: View {
     
     @StateObject private var viewModel = GroupsViewModel()
+    @EnvironmentObject var router: AppRouter
     @State private var showCreateGroup = false
     
     var body: some View {
@@ -61,6 +62,7 @@ struct GroupsView: View {
                 
                 // Create Group Button
                 Button {
+                    DemoTapLogger.log("Groups.CreateGroup")
                     showCreateGroup = true
                 } label: {
                     Image(systemName: "plus")
@@ -81,7 +83,9 @@ struct GroupsView: View {
         ScrollView {
             LazyVStack(spacing: Spacing.md) {
                 ForEach(viewModel.filteredGroups) { group in
-                    GroupCard(group: group)
+                    GroupCard(group: group, onTap: {
+                        router.pushGroupDetail(groupId: group.id)
+                    })
                 }
             }
             .padding(.horizontal, Spacing.md)
@@ -109,6 +113,7 @@ struct GroupsView: View {
             }
             
             Button {
+                DemoTapLogger.log("Groups.CreateGroupEmpty")
                 showCreateGroup = true
             } label: {
                 Text("Create Group")
@@ -128,10 +133,12 @@ struct GroupsView: View {
 // MARK: - Group Card
 struct GroupCard: View {
     let group: FitnessGroup
+    var onTap: () -> Void = {}
     
     var body: some View {
         Button {
-            // Navigate to group detail
+            DemoTapLogger.log("Groups.GroupCard", context: "id: \(group.id)")
+            onTap()
         } label: {
             HStack(spacing: Spacing.md) {
                 // Icon
@@ -196,4 +203,6 @@ struct GroupCard: View {
 
 #Preview {
     GroupsView()
+        .environmentObject(AppRouter())
+        .environment(\.appContainer, .demo())
 }

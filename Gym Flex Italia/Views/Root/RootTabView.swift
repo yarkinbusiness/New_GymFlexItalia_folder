@@ -10,8 +10,9 @@ import SwiftUI
 /// Root tab view with custom bottom tab bar matching Liquid design
 struct RootTabView: View {
     
-    @StateObject private var tabManager = TabManager.shared
+    @EnvironmentObject var router: AppRouter
     @EnvironmentObject var appearanceManager: AppearanceManager
+    @Environment(\.appContainer) private var appContainer
     
     enum Tab: String, CaseIterable {
         case home = "Home"
@@ -32,31 +33,116 @@ struct RootTabView: View {
     }
     
     var body: some View {
-        ZStack {
-            // Content
-            Group {
-                switch tabManager.selectedTab {
-                case .home:
-                    DashboardView()
-                case .discover:
-                    GymDiscoveryView()
-                case .groups:
-                    GroupsView()
-                case .checkIn:
-                    QRCheckinView(bookingId: "") // Will show empty state if no booking
-                case .profile:
-                    ProfileView()
+        NavigationStack(path: $router.path) {
+            ZStack {
+                // Content
+                Group {
+                    switch router.selectedTab {
+                    case .home:
+                        DashboardView()
+                    case .discover:
+                        GymDiscoveryView()
+                    case .groups:
+                        GroupsView()
+                    case .checkIn:
+                        QRCheckinView(bookingId: "") // Will show empty state if no booking
+                    case .profile:
+                        ProfileView()
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                
+                // Custom Bottom Tab Bar
+                VStack {
+                    Spacer()
+                    CustomTabBar(selectedTab: $router.selectedTab)
+                }
+                .ignoresSafeArea(edges: .bottom)
+            }
+            .navigationDestination(for: AppRoute.self) { route in
+                switch route {
+                case .gymDetail(let gymId):
+                    GymDetailView(gymId: gymId)
+                case .groupDetail(let groupId):
+                    GroupDetailPlaceholderView(groupId: groupId)
+                case .bookingDetail(let bookingId):
+                    QRCheckinView(bookingId: bookingId)
+                case .editProfile:
+                    EditProfileView()
+                case .settings:
+                    SettingsView()
+                case .wallet:
+                    WalletFullView()
+                case .walletTransactionDetail(let transactionId):
+                    TransactionDetailView(transactionId: transactionId)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            
-            // Custom Bottom Tab Bar
-            VStack {
-                Spacer()
-                CustomTabBar(selectedTab: $tabManager.selectedTab)
-            }
-            .ignoresSafeArea(edges: .bottom)
         }
+    }
+}
+
+// MARK: - Placeholder Views for Navigation Destinations
+// These can be replaced with real views later
+
+struct GroupDetailPlaceholderView: View {
+    let groupId: String
+    
+    var body: some View {
+        VStack(spacing: Spacing.lg) {
+            Image(systemName: "person.3.fill")
+                .font(.system(size: 60))
+                .foregroundColor(AppColors.brand)
+            
+            Text("Group Detail")
+                .font(AppFonts.h2)
+            
+            Text("Group ID: \(groupId)")
+                .font(AppFonts.body)
+                .foregroundColor(AppColors.textDim)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground))
+        .navigationTitle("Group")
+    }
+}
+
+struct EditProfilePlaceholderView: View {
+    var body: some View {
+        VStack(spacing: Spacing.lg) {
+            Image(systemName: "person.crop.circle.badge.plus")
+                .font(.system(size: 60))
+                .foregroundColor(AppColors.brand)
+            
+            Text("Edit Profile")
+                .font(AppFonts.h2)
+            
+            Text("Coming soon...")
+                .font(AppFonts.body)
+                .foregroundColor(AppColors.textDim)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground))
+        .navigationTitle("Edit Profile")
+    }
+}
+
+struct SettingsPlaceholderView: View {
+    var body: some View {
+        VStack(spacing: Spacing.lg) {
+            Image(systemName: "gearshape.fill")
+                .font(.system(size: 60))
+                .foregroundColor(AppColors.brand)
+            
+            Text("Settings")
+                .font(AppFonts.h2)
+            
+            Text("Coming soon...")
+                .font(AppFonts.body)
+                .foregroundColor(AppColors.textDim)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground))
+        .navigationTitle("Settings")
     }
 }
 
@@ -108,4 +194,11 @@ struct CustomTabBar: View {
 
 #Preview {
     RootTabView()
+        .environmentObject(AppRouter())
+        .environmentObject(AuthService.shared)
+        .environmentObject(LocationService.shared)
+        .environmentObject(AppearanceManager.shared)
+        .environmentObject(BookingManager.shared)
+        .environmentObject(SettingsStore())
+        .environment(\.appContainer, .demo())
 }

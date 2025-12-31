@@ -16,6 +16,15 @@ struct Gym_Flex_ItaliaApp: App {
     @StateObject private var appearanceManager = AppearanceManager.shared
     @StateObject private var bookingManager = BookingManager.shared
     
+    // Navigation router
+    @StateObject private var router = AppRouter()
+    
+    // Settings store (persists to UserDefaults)
+    @StateObject private var settingsStore = SettingsStore()
+    
+    // Dependency injection container (uses mock services for now)
+    private let appContainer = AppContainer.demo()
+    
     init() {
         // App configuration
         configureApp()
@@ -24,12 +33,19 @@ struct Gym_Flex_ItaliaApp: App {
     var body: some Scene {
         WindowGroup {
             RootNavigationView()
+                .environment(\.appContainer, appContainer)
+                .environmentObject(authService)
+                .environmentObject(locationService)
                 .environmentObject(appearanceManager)
                 .environmentObject(bookingManager)
-                .preferredColorScheme(appearanceManager.colorScheme)
+                .environmentObject(router)
+                .environmentObject(settingsStore)
+                .preferredColorScheme(settingsStore.preferredColorScheme)
                 .onAppear {
                     // Request location permission
                     locationService.requestLocationPermission()
+                    // Sync appearance with settings
+                    syncAppearanceWithSettings()
                 }
         }
     }
@@ -46,5 +62,18 @@ struct Gym_Flex_ItaliaApp: App {
         print("📱 Version: \(AppConfig.App.fullVersion)")
         print("🌍 AppEnvironment: \(AppConfig.environment.rawValue)")
         print("⚙️ Features: Auth: \(FeatureFlags.shared.isAuthEnabled), Groups: \(FeatureFlags.shared.isGroupsEnabled), Wallet: \(FeatureFlags.shared.isWalletEnabled)")
+    }
+    
+    private func syncAppearanceWithSettings() {
+        // Sync AppearanceManager with persisted settings on launch
+        switch settingsStore.settings.appearanceMode {
+        case .light:
+            appearanceManager.setColorScheme(.light)
+        case .dark:
+            appearanceManager.setColorScheme(.dark)
+        case .system:
+            // System mode - preferredColorScheme(nil) handles this
+            break
+        }
     }
 }

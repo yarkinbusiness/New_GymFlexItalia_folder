@@ -1,84 +1,115 @@
 //
-//  WalletView.swift
+//  WalletFullView.swift
 //  Gym Flex Italia
 //
-//  Created by Yarkin Yavuz on 11/16/25.
+//  Complete wallet screen with balance, transactions list, and top-up
 //
 
 import SwiftUI
-import PassKit
-import UIKit
 
-/// Wallet top-up modal view
-struct WalletView: View {
-    @Environment(\.dismiss) var dismiss
-    @StateObject private var viewModel = WalletViewModel()
-    @State private var showCardForm = false
-    @State private var paymentDelegate: PaymentDelegate?
+/// Full wallet screen with balance and transaction history
+struct WalletFullView: View {
+    
+    @Environment(\.appContainer) private var appContainer
+    @EnvironmentObject var router: AppRouter
+    
+    @StateObject private var viewModel = WalletFullViewModel()
+    
+    @State private var showTopUpSheet = false
     
     var body: some View {
-        NavigationStack {
-            ZStack {
-                AppGradients.background
-                    .ignoresSafeArea()
-                
-                ScrollView {
-                    VStack(spacing: Spacing.xl) {
-                        // Balance Display
-                        balanceSection
-                        
-                        // Top-Up Amount Selection
-                        amountSelectionSection
-                        
-                        // Payment Method Selection
-                        paymentMethodSection
-                        
-                        // Card Form (if selected)
-                        if showCardForm && viewModel.selectedPaymentMethod == .creditCard {
-                            cardFormSection
-                        }
-                        
-                        // Top-Up Button
-                        topUpButton
+        ZStack {
+            // Background
+            AppGradients.background
+                .ignoresSafeArea()
+            
+            if viewModel.isLoading {
+                loadingView
+            } else {
+                mainContent
+            }
+        }
+        .navigationTitle("Wallet")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    DemoTapLogger.log("Wallet.TopUp.Open")
+                    showTopUpSheet = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus.circle.fill")
+                        Text("Top Up")
                     }
-                    .padding(Spacing.lg)
+                    .font(AppFonts.label)
+                    .foregroundColor(AppColors.brand)
                 }
             }
-            .navigationTitle("Wallet")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .foregroundColor(AppColors.textHigh)
-                    }
-                }
-            }
-            .alert("Error", isPresented: Binding(
-                get: { viewModel.errorMessage != nil },
-                set: { _ in viewModel.errorMessage = nil }
-            )) {
-                Button("OK") {}
-            } message: {
-                Text(viewModel.errorMessage ?? "")
-            }
-            .alert("Success", isPresented: Binding(
-                get: { viewModel.successMessage != nil },
-                set: { _ in viewModel.successMessage = nil }
-            )) {
-                Button("OK") {
-                    dismiss()
-                }
-            } message: {
-                Text(viewModel.successMessage ?? "")
-            }
+        }
+        .sheet(isPresented: $showTopUpSheet) {
+            topUpSheet
+        }
+        .task {
+            await viewModel.load(using: appContainer.walletService)
+        }
+        .refreshable {
+            await viewModel.refresh(using: appContainer.walletService)
         }
     }
     
-    // MARK: - Balance Section
-    private var balanceSection: some View {
+    // MARK: - Loading View
+    
+    private var loadingView: some View {
+        VStack(spacing: Spacing.lg) {
+            ProgressView()
+                .scaleEffect(1.5)
+            Text("Loading wallet...")
+                .font(AppFonts.body)
+                .foregroundColor(AppColors.textDim)
+        }
+    }
+    
+    // MARK: - Main Content
+    
+    private var mainContent: some View {
+        ScrollView {
+            VStack(spacing: Spacing.xl) {
+                // Error Banner
+                if let error = viewModel.errorMessage {
+                    InlineErrorBanner(
+                        message: error,
+                        type: .error,
+                        onDismiss: { viewModel.clearError() }
+                    )
+                    .padding(.horizontal, Spacing.lg)
+                }
+                
+                // Success Banner
+                if let success = viewModel.topUpSuccessMessage {
+                    InlineErrorBanner(
+                        message: success,
+                        type: .success,
+                        onDismiss: { viewModel.clearSuccess() }
+                    )
+                    .padding(.horizontal, Spacing.lg)
+                }
+                
+                // Balance Card
+                balanceCard
+                
+                // Quick Actions
+                quickActions
+                
+                // Transactions List
+                transactionsSection
+            }
+            .padding(.vertical, Spacing.lg)
+        }
+    }
+    
+    // MARK: - Balance Card
+    
+    private var balanceCard: some View {
         VStack(spacing: Spacing.md) {
             Text("Current Balance")
                 .font(AppFonts.bodySmall)
@@ -91,370 +122,238 @@ struct WalletView: View {
                     .font(.system(size: 32, weight: .semibold))
                     .foregroundColor(AppColors.textHigh)
                 
-                Text(String(format: "%.2f", viewModel.balance))
-                    .font(.system(size: 48, weight: .bold))
+                Text(String(format: "%.2f", viewModel.balance?.amount ?? 0))
+                    .font(.system(size: 56, weight: .bold))
                     .foregroundColor(AppColors.textHigh)
             }
+            
+            Text(viewModel.balance?.currency ?? "EUR")
+                .font(AppFonts.caption)
+                .foregroundColor(AppColors.textDim)
         }
         .frame(maxWidth: .infinity)
-        .padding(Spacing.xl)
-        .glassBackground(cornerRadius: CornerRadii.xl, opacity: 0.4, blur: 25)
+        .padding(.vertical, Spacing.xxl)
+        .padding(.horizontal, Spacing.xl)
+        .background(
+            RoundedRectangle(cornerRadius: CornerRadii.xl)
+                .fill(AppGradients.primary.opacity(0.15))
+                .overlay(
+                    RoundedRectangle(cornerRadius: CornerRadii.xl)
+                        .stroke(AppColors.brand.opacity(0.3), lineWidth: 1)
+                )
+        )
+        .padding(.horizontal, Spacing.lg)
     }
     
-    // MARK: - Amount Selection Section
-    private var amountSelectionSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.md) {
-            Text("Select Amount")
-                .font(AppFonts.h5)
-                .foregroundColor(AppColors.textHigh)
-            
-            // Predefined amounts
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: Spacing.md) {
-                ForEach(viewModel.predefinedAmounts, id: \.self) { amount in
-                    AmountButton(
-                        amount: amount,
-                        isSelected: viewModel.selectedAmount == amount
-                    ) {
-                        viewModel.selectedAmount = amount
-                        viewModel.customAmount = ""
-                    }
-                }
+    // MARK: - Quick Actions
+    
+    private var quickActions: some View {
+        HStack(spacing: Spacing.md) {
+            QuickActionButton(
+                icon: "plus.circle.fill",
+                label: "Add Funds",
+                color: .green
+            ) {
+                DemoTapLogger.log("Wallet.QuickAction.AddFunds")
+                showTopUpSheet = true
             }
             
-            // Custom amount
-            VStack(alignment: .leading, spacing: Spacing.sm) {
-                Text("Or enter custom amount")
-                    .font(AppFonts.bodySmall)
-                    .foregroundColor(AppColors.textDim)
-                
-                HStack {
-                    Text("€")
-                        .font(AppFonts.h5)
-                        .foregroundColor(AppColors.textDim)
-                    
-                    TextField("0.00", text: $viewModel.customAmount)
-                        .font(AppFonts.h5)
-                        .foregroundColor(AppColors.textHigh)
-                        .keyboardType(.decimalPad)
-                        .onChange(of: viewModel.customAmount) { _, newValue in
-                            // Clear selected amount when typing custom
-                            if !newValue.isEmpty {
-                                viewModel.selectedAmount = nil
-                            }
+            QuickActionButton(
+                icon: "clock.arrow.circlepath",
+                label: "History",
+                color: .blue
+            ) {
+                DemoTapLogger.log("Wallet.QuickAction.History")
+                // Already showing history below
+            }
+            
+            QuickActionButton(
+                icon: "arrow.up.circle.fill",
+                label: "Send",
+                color: .orange
+            ) {
+                DemoTapLogger.logNoOp("Wallet.QuickAction.Send")
+            }
+        }
+        .padding(.horizontal, Spacing.lg)
+    }
+    
+    // MARK: - Transactions Section
+    
+    private var transactionsSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            Text("Recent Transactions")
+                .font(AppFonts.h5)
+                .foregroundColor(AppColors.textHigh)
+                .padding(.horizontal, Spacing.lg)
+            
+            if viewModel.hasTransactions {
+                LazyVStack(spacing: Spacing.sm) {
+                    ForEach(viewModel.transactions) { transaction in
+                        TransactionRow(transaction: transaction) {
+                            DemoTapLogger.log("Wallet.Transaction.Tap", context: "id: \(transaction.id)")
+                            router.pushWalletTransactionDetail(transactionId: transaction.id)
                         }
+                    }
                 }
-                .padding(Spacing.md)
-                .glassBackground(cornerRadius: CornerRadii.md, opacity: 0.3, blur: 18)
+                .padding(.horizontal, Spacing.lg)
+            } else {
+                emptyTransactionsView
             }
         }
     }
     
-    // MARK: - Payment Method Section
-    private var paymentMethodSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.md) {
-            Text("Payment Method")
-                .font(AppFonts.h5)
-                .foregroundColor(AppColors.textHigh)
+    private var emptyTransactionsView: some View {
+        VStack(spacing: Spacing.md) {
+            Image(systemName: "tray")
+                .font(.system(size: 48))
+                .foregroundColor(AppColors.textDim)
             
+            Text("No transactions yet")
+                .font(AppFonts.body)
+                .foregroundColor(AppColors.textDim)
+            
+            Text("Add funds to get started")
+                .font(AppFonts.caption)
+                .foregroundColor(AppColors.textDim.opacity(0.7))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Spacing.xxl)
+    }
+    
+    // MARK: - Top Up Sheet
+    
+    private var topUpSheet: some View {
+        TopUpSheetView(isPresented: $showTopUpSheet, viewModel: viewModel)
+    }
+}
+
+
+// MARK: - Quick Action Button
+
+struct QuickActionButton: View {
+    let icon: String
+    let label: String
+    let color: Color
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
             VStack(spacing: Spacing.sm) {
-                // Apple Pay Button
-                if viewModel.canUseApplePay {
-                    ApplePayButton(
-                        isSelected: viewModel.selectedPaymentMethod == .applePay
-                    ) {
-                        viewModel.selectedPaymentMethod = .applePay
-                        showCardForm = false
-                    }
-                }
+                Image(systemName: icon)
+                    .font(.system(size: 24))
+                    .foregroundColor(color)
                 
-                // Credit Card Button
-                CardPaymentButton(
-                    isSelected: viewModel.selectedPaymentMethod == .creditCard
-                ) {
-                    viewModel.selectedPaymentMethod = .creditCard
-                    showCardForm = true
-                }
-            }
-        }
-    }
-    
-    // MARK: - Card Form Section
-    private var cardFormSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.md) {
-            Text("Card Details")
-                .font(AppFonts.h5)
-                .foregroundColor(AppColors.textHigh)
-            
-            VStack(spacing: Spacing.md) {
-                // Card Number
-                GlassInputField(
-                    title: "Card Number",
-                    placeholder: "1234 5678 9012 3456",
-                    text: Binding(
-                        get: { viewModel.cardNumber },
-                        set: { viewModel.cardNumber = viewModel.formatCardNumber($0) }
-                    ),
-                    icon: "creditcard.fill",
-                    keyboardType: .numberPad
-                )
-                
-                // Expiry and CVV
-                HStack(spacing: Spacing.md) {
-                    GlassInputField(
-                        title: "Expiry",
-                        placeholder: "MM/YY",
-                        text: Binding(
-                            get: { viewModel.cardExpiry },
-                            set: { viewModel.cardExpiry = viewModel.formatExpiry($0) }
-                        ),
-                        icon: "calendar",
-                        keyboardType: .numberPad
-                    )
-                    
-                    GlassInputField(
-                        title: "CVV",
-                        placeholder: "123",
-                        text: $viewModel.cardCVV,
-                        icon: "lock.fill",
-                        isSecure: true,
-                        keyboardType: .numberPad
-                    )
-                }
-                
-                // Cardholder Name
-                GlassInputField(
-                    title: "Cardholder Name",
-                    placeholder: "John Doe",
-                    text: $viewModel.cardholderName,
-                    icon: "person.fill"
-                )
-            }
-        }
-        .padding(Spacing.md)
-        .glassBackground(cornerRadius: CornerRadii.lg, opacity: 0.3, blur: 18)
-    }
-    
-    // MARK: - Top-Up Button
-    private var topUpButton: some View {
-        Button {
-            Task {
-                if viewModel.selectedPaymentMethod == .applePay {
-                    // In mock mode, skip Apple Pay presentation
-                    if AppConfig.API.useMocks {
-                        await viewModel.processTopUp()
-                    } else {
-                        await processApplePay()
-                    }
-                } else {
-                    await viewModel.processTopUp()
-                }
-            }
-        } label: {
-            HStack {
-                if viewModel.isProcessingPayment {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                } else {
-                    Text("Add Funds")
-                        .font(AppFonts.label)
-                        .foregroundColor(.white)
-                }
+                Text(label)
+                    .font(AppFonts.caption)
+                    .foregroundColor(AppColors.textHigh)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, Spacing.md)
-            .background(
-                Group {
-                    if viewModel.isValidAmount && !viewModel.isProcessingPayment {
-                        AppGradients.primary
-                    } else {
-                        AppColors.secondary
-                    }
-                }
-            )
-            .clipShape(RoundedRectangle(cornerRadius: CornerRadii.md, style: .continuous))
-            .shadow(
-                color: viewModel.isValidAmount ? AppColors.brand.opacity(0.4) : Color.clear,
-                radius: 20,
-                x: 0,
-                y: 10
-            )
-        }
-        .disabled(!viewModel.isValidAmount || viewModel.isProcessingPayment)
-        .opacity(viewModel.isValidAmount ? 1.0 : 0.6)
-    }
-    
-    // MARK: - Apple Pay Processing
-    private func processApplePay() async {
-        let request = await viewModel.createApplePayRequest()
-        let controller = PKPaymentAuthorizationController(paymentRequest: request)
-        
-        let delegate = PaymentDelegate { result in
-            Task { @MainActor [weak viewModel] in
-                guard let viewModel = viewModel else { return }
-                switch result {
-case .success:
-                    await viewModel.processTopUp()
-                case .failure(let error):
-                    viewModel.errorMessage = "Apple Pay failed: \(error.localizedDescription)"
-                }
-            }
-        }
-        
-        // Retain delegate in state to prevent deallocation
-        paymentDelegate = delegate
-        controller.delegate = delegate
-        
-        controller.present { success in
-            Task { @MainActor [weak viewModel] in
-                guard let viewModel = viewModel else { return }
-                if !success {
-                    viewModel.errorMessage = "Unable to present Apple Pay"
-                }
-            }
+            .glassBackground(cornerRadius: CornerRadii.md)
         }
     }
 }
 
-// MARK: - Amount Button
-struct AmountButton: View {
-    let amount: Double
-    let isSelected: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: Spacing.xs) {
-                Text("€\(String(format: "%.0f", amount))")
-                    .font(AppFonts.h5)
-                    .foregroundColor(isSelected ? .white : AppColors.textHigh)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, Spacing.md)
-            .background(
-                Group {
-                    if isSelected {
-                        AppGradients.primary
-                    } else {
-                        Color.clear
-                    }
-                }
-            )
-            .glassBackground(cornerRadius: CornerRadii.md, opacity: isSelected ? 0 : 0.3)
-            .overlay(
-                RoundedRectangle(cornerRadius: CornerRadii.md)
-                    .stroke(
-                        isSelected ? Color.clear : AppColors.border.opacity(0.3),
-                        lineWidth: 1
-                    )
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-}
+// MARK: - Transaction Row
 
-// MARK: - Apple Pay Button
-struct ApplePayButton: View {
-    let isSelected: Bool
-    let action: () -> Void
+struct TransactionRow: View {
+    let transaction: WalletTransaction
+    let onTap: () -> Void
     
     var body: some View {
-        Button(action: action) {
+        Button(action: onTap) {
             HStack(spacing: Spacing.md) {
-                Image(systemName: "apple.logo")
-                    .font(.system(size: 20, weight: .semibold))
-                
-                Text("Apple Pay")
-                    .font(AppFonts.label)
-                
-                Spacer()
-                
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(AppColors.brand)
-                }
-            }
-            .foregroundColor(isSelected ? AppColors.textHigh : AppColors.textDim)
-            .padding(Spacing.md)
-            .glassBackground(cornerRadius: CornerRadii.md, opacity: isSelected ? 0.4 : 0.3)
-            .overlay(
-                RoundedRectangle(cornerRadius: CornerRadii.md)
-                    .stroke(
-                        isSelected ? AppColors.brand : AppColors.border.opacity(0.3),
-                        lineWidth: isSelected ? 2 : 1
-                    )
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-}
-
-// MARK: - Card Payment Button
-struct CardPaymentButton: View {
-    let isSelected: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: Spacing.md) {
-                Image(systemName: "creditcard.fill")
+                // Icon
+                Image(systemName: transaction.type.icon)
                     .font(.system(size: 20))
+                    .foregroundColor(iconColor)
+                    .frame(width: 40, height: 40)
+                    .background(iconColor.opacity(0.15))
+                    .clipShape(Circle())
                 
-                Text("Debit/Credit Card")
-                    .font(AppFonts.label)
+                // Details
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(transaction.description)
+                        .font(AppFonts.body)
+                        .foregroundColor(AppColors.textHigh)
+                        .lineLimit(1)
+                    
+                    HStack(spacing: Spacing.xs) {
+                        Text(formattedDate)
+                            .font(AppFonts.caption)
+                            .foregroundColor(AppColors.textDim)
+                        
+                        if transaction.status != .completed {
+                            Text("•")
+                                .foregroundColor(AppColors.textDim)
+                            Text(transaction.status.displayName)
+                                .font(AppFonts.caption)
+                                .foregroundColor(statusColor)
+                        }
+                    }
+                }
                 
                 Spacer()
                 
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(AppColors.brand)
-                }
+                // Amount
+                Text(formattedAmount)
+                    .font(AppFonts.h5)
+                    .foregroundColor(transaction.type.isPositive ? .green : AppColors.textHigh)
+                
+                // Chevron
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(AppColors.textDim)
             }
-            .foregroundColor(isSelected ? AppColors.textHigh : AppColors.textDim)
             .padding(Spacing.md)
-            .glassBackground(cornerRadius: CornerRadii.md, opacity: isSelected ? 0.4 : 0.3)
-            .overlay(
-                RoundedRectangle(cornerRadius: CornerRadii.md)
-                    .stroke(
-                        isSelected ? AppColors.brand : AppColors.border.opacity(0.3),
-                        lineWidth: isSelected ? 2 : 1
-                    )
-            )
+            .glassBackground(cornerRadius: CornerRadii.md)
         }
-        .buttonStyle(PlainButtonStyle())
-    }
-}
-
-// MARK: - Glass Input Field
-// GlassInputField is now in Views/Shared/GlassInputField.swift
-
-// MARK: - Payment Delegate
-class PaymentDelegate: NSObject, PKPaymentAuthorizationControllerDelegate {
-    let completion: (Result<Void, Error>) -> Void
-    
-    init(completion: @escaping (Result<Void, Error>) -> Void) {
-        self.completion = completion
+        .buttonStyle(.plain)
     }
     
-    func paymentAuthorizationController(
-        _ controller: PKPaymentAuthorizationController,
-        didAuthorizePayment payment: PKPayment,
-        handler completion: @escaping (PKPaymentAuthorizationResult) -> Void
-    ) {
-        // In production, send payment token to backend for processing
-        // For now, simulate success
-        completion(PKPaymentAuthorizationResult(status: .success, errors: nil))
-        self.completion(.success(()))
+    private var iconColor: Color {
+        switch transaction.type {
+        case .deposit, .bonus:
+            return .green
+        case .refund:
+            return .blue
+        case .payment, .withdrawal:
+            return .orange
+        case .penalty:
+            return .red
+        }
     }
     
-    func paymentAuthorizationControllerDidFinish(_ controller: PKPaymentAuthorizationController) {
-        controller.dismiss()
+    private var statusColor: Color {
+        switch transaction.status {
+        case .completed:
+            return .green
+        case .pending, .processing:
+            return .orange
+        case .failed, .cancelled:
+            return .red
+        case .refunded:
+            return .blue
+        }
+    }
+    
+    private var formattedAmount: String {
+        let prefix = transaction.type.isPositive ? "+" : ""
+        return "\(prefix)€\(String(format: "%.2f", abs(transaction.amount)))"
+    }
+    
+    private var formattedDate: String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: transaction.createdAt, relativeTo: Date())
     }
 }
 
 #Preview {
-    WalletView()
+    NavigationStack {
+        WalletFullView()
+    }
+    .environmentObject(AppRouter())
+    .environment(\.appContainer, .demo())
 }
-
