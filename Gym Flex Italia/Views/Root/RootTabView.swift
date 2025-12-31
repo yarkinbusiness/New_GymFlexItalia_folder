@@ -66,8 +66,10 @@ struct RootTabView: View {
                     GymDetailView(gymId: gymId)
                 case .groupDetail(let groupId):
                     GroupDetailPlaceholderView(groupId: groupId)
+                case .bookingHistory:
+                    BookingHistoryView()
                 case .bookingDetail(let bookingId):
-                    QRCheckinView(bookingId: bookingId)
+                    BookingDetailView(bookingId: bookingId)
                 case .editProfile:
                     EditProfileView()
                 case .settings:

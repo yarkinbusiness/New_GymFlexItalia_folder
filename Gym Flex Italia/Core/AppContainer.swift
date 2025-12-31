@@ -26,6 +26,9 @@ final class AppContainer {
     /// Wallet-related services (balance, transactions, top-up)
     let walletService: WalletServiceProtocol
     
+    /// Booking history services (fetch bookings, cancel)
+    let bookingHistoryService: BookingHistoryServiceProtocol
+    
     // MARK: - Initialization
     
     init(
@@ -33,13 +36,15 @@ final class AppContainer {
         bookingService: BookingServiceProtocol,
         profileService: ProfileServiceProtocol,
         notificationService: NotificationServiceProtocol,
-        walletService: WalletServiceProtocol
+        walletService: WalletServiceProtocol,
+        bookingHistoryService: BookingHistoryServiceProtocol
     ) {
         self.gymService = gymService
         self.bookingService = bookingService
         self.profileService = profileService
         self.notificationService = notificationService
         self.walletService = walletService
+        self.bookingHistoryService = bookingHistoryService
     }
     
     // MARK: - Factory Methods
@@ -52,13 +57,15 @@ final class AppContainer {
         let profileService = MockProfileService()
         let notificationService = MockNotificationService()
         let walletService = MockWalletService()
+        let bookingHistoryService = MockBookingHistoryService()
         
         return AppContainer(
             gymService: gymService,
             bookingService: bookingService,
             profileService: profileService,
             notificationService: notificationService,
-            walletService: walletService
+            walletService: walletService,
+            bookingHistoryService: bookingHistoryService
         )
     }
     
@@ -70,13 +77,15 @@ final class AppContainer {
         let profileService = MockProfileService()
         let notificationService = LocalNotificationService() // Real iOS notifications
         let walletService = MockWalletService() // TODO: Replace with real wallet service
+        let bookingHistoryService = MockBookingHistoryService() // TODO: Replace with real service
         
         return AppContainer(
             gymService: gymService,
             bookingService: bookingService,
             profileService: profileService,
             notificationService: notificationService,
-            walletService: walletService
+            walletService: walletService,
+            bookingHistoryService: bookingHistoryService
         )
     }
 }

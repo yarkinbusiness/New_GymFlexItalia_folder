@@ -12,6 +12,7 @@ import Combine
 enum AppRoute: Hashable {
     case gymDetail(gymId: String)
     case groupDetail(groupId: String)
+    case bookingHistory
     case bookingDetail(bookingId: String)
     case editProfile
     case settings
@@ -22,6 +23,12 @@ enum AppRoute: Hashable {
 
 /// Central navigation state owner for consistent navigation across the app
 /// Inject via @EnvironmentObject at RootNavigationView level
+///
+/// Navigation Hardening:
+/// - All path modifications MUST go through AppRouter methods (appendRoute, pop, resetToRoot)
+/// - `routeStack` mirrors `NavigationPath` for idempotency checks since NavigationPath doesn't expose contents
+/// - System back gestures sync via `syncRouteStackWithPath()` called from path observation
+/// - Debug mode assertions detect any drift between routeStack and path
 @MainActor
 final class AppRouter: ObservableObject {
     
@@ -33,7 +40,20 @@ final class AppRouter: ObservableObject {
     // MARK: - Stack Navigation
     
     /// Navigation path for the current flow
-    @Published var path = NavigationPath()
+    /// Use Combine to observe changes from system back gestures
+    @Published var path = NavigationPath() {
+        didSet {
+            syncRouteStackWithPath()
+        }
+    }
+    
+    /// Tracks routes in the current navigation path for idempotency checks
+    /// NavigationPath doesn't expose its contents, so we mirror it here
+    /// INVARIANT: routeStack.count should always equal path.count
+    private var routeStack: [AppRoute] = []
+    
+    /// Flag to prevent recursive sync during programmatic updates
+    private var isSyncingFromPath = false
     
     // MARK: - Singleton (for backwards compatibility with existing code)
     
@@ -43,50 +63,63 @@ final class AppRouter: ObservableObject {
     
     // MARK: - Navigation Methods
     
-    /// Navigate to a gym detail view
+    /// Navigate to a gym detail view (idempotent - won't stack duplicates)
     func pushGymDetail(gymId: String) {
-        path.append(AppRoute.gymDetail(gymId: gymId))
+        pushIfNotTop(.gymDetail(gymId: gymId))
     }
     
     /// Navigate to a group detail view
     func pushGroupDetail(groupId: String) {
-        path.append(AppRoute.groupDetail(groupId: groupId))
+        appendRoute(.groupDetail(groupId: groupId))
+    }
+    
+    /// Navigate to booking history view
+    func pushBookingHistory() {
+        appendRoute(.bookingHistory)
     }
     
     /// Navigate to a booking detail view
     func pushBookingDetail(bookingId: String) {
-        path.append(AppRoute.bookingDetail(bookingId: bookingId))
+        appendRoute(.bookingDetail(bookingId: bookingId))
     }
     
     /// Navigate to edit profile view
     func pushEditProfile() {
-        path.append(AppRoute.editProfile)
+        appendRoute(.editProfile)
     }
     
     /// Navigate to settings view
     func pushSettings() {
-        path.append(AppRoute.settings)
+        appendRoute(.settings)
     }
     
     /// Navigate to wallet view
     func pushWallet() {
-        path.append(AppRoute.wallet)
+        appendRoute(.wallet)
     }
     
     /// Navigate to wallet transaction detail view
     func pushWalletTransactionDetail(transactionId: String) {
-        path.append(AppRoute.walletTransactionDetail(transactionId: transactionId))
+        appendRoute(.walletTransactionDetail(transactionId: transactionId))
     }
     
     /// Pop the top view from the navigation stack
     func pop() {
         guard !path.isEmpty else { return }
+        isSyncingFromPath = true
         path.removeLast()
+        _ = routeStack.popLast()
+        isSyncingFromPath = false
+        validateStackSync()
     }
     
     /// Reset navigation to root (clear entire stack)
     func resetToRoot() {
+        isSyncingFromPath = true
         path = NavigationPath()
+        routeStack.removeAll()
+        isSyncingFromPath = false
+        validateStackSync()
     }
     
     /// Pop to root and switch to a specific tab
@@ -150,6 +183,25 @@ final class AppRouter: ObservableObject {
             resetToRoot()
             ensureOnTab(.profile)
             pushIfNotTop(.settings)
+            
+        case .bookingHistory:
+            // Navigate to Profile tab and push booking history
+            resetToRoot()
+            ensureOnTab(.profile)
+            pushIfNotTop(.bookingHistory)
+            
+        case .bookingDetail(let bookingId):
+            // Navigate to Profile tab, push booking history, then booking detail
+            resetToRoot()
+            ensureOnTab(.profile)
+            pushIfNotTop(.bookingHistory)
+            pushIfNotTop(.bookingDetail(bookingId: bookingId))
+            
+        case .gymDetail(let gymId):
+            // Navigate to Discover tab and push gym detail
+            resetToRoot()
+            ensureOnTab(.discover)
+            pushIfNotTop(.gymDetail(gymId: gymId))
         }
     }
     
@@ -162,16 +214,86 @@ final class AppRouter: ObservableObject {
         }
     }
     
-    /// Pushes a route only if it's not already the top of the navigation stack
-    /// This prevents duplicate pushes from repeated deep link handling
-    private func pushIfNotTop(_ route: AppRoute) {
-        // NavigationPath doesn't expose its contents directly, so we track separately
-        // For now, we just append - the resetToRoot() call ensures clean state
+    /// Appends a route to the navigation stack and tracks it
+    private func appendRoute(_ route: AppRoute) {
+        isSyncingFromPath = true
         path.append(route)
+        routeStack.append(route)
+        isSyncingFromPath = false
+        validateStackSync()
+    }
+    
+    /// Pushes a route only if it's not already the top of the navigation stack
+    /// This prevents duplicate pushes from repeated taps or deep link handling
+    private func pushIfNotTop(_ route: AppRoute) {
+        // Check if the route is already at the top of the stack
+        if let topRoute = routeStack.last, topRoute == route {
+            // Already at top - skip to prevent stacking duplicates
+            return
+        }
+        appendRoute(route)
     }
     
     /// Navigate to the deep link simulator (debug only)
     func pushDeepLinkSimulator() {
-        path.append(AppRoute.deepLinkSimulator)
+        appendRoute(.deepLinkSimulator)
     }
+    
+    // MARK: - Stack Synchronization (for back gesture handling)
+    
+    /// Syncs routeStack when path changes externally (e.g., system back gesture)
+    /// This is called from path's didSet observer
+    private func syncRouteStackWithPath() {
+        // Skip if we're making programmatic changes
+        guard !isSyncingFromPath else { return }
+        
+        // If path was reduced (back gesture/button), trim routeStack to match
+        if path.count < routeStack.count {
+            let itemsToRemove = routeStack.count - path.count
+            routeStack.removeLast(itemsToRemove)
+            
+            #if DEBUG
+            DemoTapLogger.log("AppRouter.BackSync", context: "Removed \(itemsToRemove) items, stack now \(routeStack.count)")
+            #endif
+        }
+        
+        // Path was cleared entirely (shouldn't happen via normal back but handle it)
+        if path.isEmpty && !routeStack.isEmpty {
+            routeStack.removeAll()
+            
+            #if DEBUG
+            DemoTapLogger.log("AppRouter.BackSync", context: "Path cleared, routeStack reset")
+            #endif
+        }
+        
+        validateStackSync()
+    }
+    
+    /// Debug assertion to detect any drift between routeStack and path
+    /// Called after every navigation operation
+    private func validateStackSync() {
+        #if DEBUG
+        if routeStack.count != path.count {
+            let message = "⚠️ AppRouter DESYNC: routeStack.count=\(routeStack.count) != path.count=\(path.count)"
+            print(message)
+            DemoTapLogger.log("AppRouter.DESYNC_WARNING", context: message)
+            // In debug builds, this helps catch issues early
+            // assertionFailure(message) // Uncomment to fail fast during development
+        }
+        #endif
+    }
+    
+    // MARK: - Debug Helpers
+    
+    #if DEBUG
+    /// Returns the current route stack for debugging
+    var debugRouteStack: [AppRoute] {
+        routeStack
+    }
+    
+    /// Returns whether the navigation state is synchronized
+    var isStackSynchronized: Bool {
+        routeStack.count == path.count
+    }
+    #endif
 }

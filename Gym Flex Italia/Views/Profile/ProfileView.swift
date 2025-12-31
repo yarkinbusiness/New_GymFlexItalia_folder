@@ -405,46 +405,76 @@ struct ProfileView: View {
     // MARK: - Booking History
     private var bookingHistorySection: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            HStack(spacing: Spacing.sm) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: CornerRadii.sm)
-                        .fill(AppColors.accent.opacity(0.2))
-                        .frame(width: 32, height: 32)
+            HStack {
+                HStack(spacing: Spacing.sm) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: CornerRadii.sm)
+                            .fill(AppColors.accent.opacity(0.2))
+                            .frame(width: 32, height: 32)
+                        
+                        Image(systemName: "calendar.badge.clock")
+                            .font(.system(size: 14))
+                            .foregroundColor(AppColors.accent)
+                    }
                     
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 14))
-                        .foregroundColor(AppColors.accent)
+                    Text("My Bookings")
+                        .font(AppFonts.h4)
+                        .foregroundColor(Color(.label))
                 }
                 
-                Text("Booking History")
-                    .font(AppFonts.h4)
-                    .foregroundColor(Color(.label))
-            }
-            
-            VStack(spacing: Spacing.sm) {
-                if !viewModel.recentBookings.isEmpty {
-                    ForEach(viewModel.recentBookings.prefix(3)) { booking in
-                        BookingHistoryRow(booking: booking)
+                Spacer()
+                
+                Button {
+                    DemoTapLogger.log("Profile.MyBookings")
+                    router.pushBookingHistory()
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("View All")
+                            .font(AppFonts.bodySmall)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12))
                     }
-                } else {
-                    // Placeholder data
-                    BookingHistoryRow(
-                        gymName: "UrbanFit Villa Borghese",
-                        date: "11/11/2025",
-                        duration: "1h",
-                        price: "€4.00",
-                        status: "expired"
-                    )
-                    
-                    BookingHistoryRow(
-                        gymName: "FitnessPro Parioli",
-                        date: "11/6/2025",
-                        duration: "1.5h",
-                        price: "€6.00",
-                        status: "expired"
-                    )
+                    .foregroundColor(AppColors.brand)
                 }
             }
+            
+            // Quick access button
+            Button {
+                DemoTapLogger.log("Profile.MyBookings")
+                router.pushBookingHistory()
+            } label: {
+                HStack(spacing: Spacing.md) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: CornerRadii.sm)
+                            .fill(AppColors.brand.opacity(0.1))
+                            .frame(width: 40, height: 40)
+                        
+                        Image(systemName: "list.bullet.rectangle")
+                            .font(.system(size: 18))
+                            .foregroundColor(AppColors.brand)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("View Booking History")
+                            .font(AppFonts.h5)
+                            .foregroundColor(Color(.label))
+                        
+                        Text("Upcoming and past gym sessions")
+                            .font(AppFonts.bodySmall)
+                            .foregroundColor(Color(.secondaryLabel))
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14))
+                        .foregroundColor(Color(.tertiaryLabel))
+                }
+                .padding(Spacing.md)
+                .background(Color(.tertiarySystemBackground))
+                .cornerRadius(CornerRadii.md)
+            }
+            .buttonStyle(.plain)
         }
         .padding(Spacing.lg)
         .background(Color(.secondarySystemBackground))

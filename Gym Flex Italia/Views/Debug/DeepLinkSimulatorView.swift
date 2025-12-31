@@ -15,6 +15,7 @@ struct DeepLinkSimulatorView: View {
     @EnvironmentObject var router: AppRouter
     
     @State private var customTransactionId = "txn_001"
+    @State private var customGymId = "gym_1"
     @State private var showEnqueuedMessage = false
     
     var body: some View {
@@ -106,6 +107,45 @@ struct DeepLinkSimulatorView: View {
                         subtitle: "Navigate to Settings screen"
                     )
                 }
+                
+                Button {
+                    DemoTapLogger.log("Debug.DeepLink.BookingHistory")
+                    deepLinkQueue.enqueue(.bookingHistory)
+                    showEnqueuedFeedback()
+                } label: {
+                    DeepLinkRow(
+                        icon: "calendar.badge.clock",
+                        iconColor: .cyan,
+                        title: "Booking History",
+                        subtitle: "Navigate to My Bookings"
+                    )
+                }
+                
+                Button {
+                    DemoTapLogger.log("Debug.DeepLink.BookingDetail", context: "id: booking_upcoming_001")
+                    deepLinkQueue.enqueue(.bookingDetail("booking_upcoming_001"))
+                    showEnqueuedFeedback()
+                } label: {
+                    DeepLinkRow(
+                        icon: "calendar",
+                        iconColor: .blue,
+                        title: "Booking Detail",
+                        subtitle: "Navigate to booking_upcoming_001"
+                    )
+                }
+                
+                Button {
+                    DemoTapLogger.log("Debug.DeepLink.GymDetail", context: "id: \(customGymId)")
+                    deepLinkQueue.enqueue(.gymDetail(customGymId))
+                    showEnqueuedFeedback()
+                } label: {
+                    DeepLinkRow(
+                        icon: "dumbbell.fill",
+                        iconColor: .pink,
+                        title: "Gym Detail",
+                        subtitle: "Navigate to gym: \(customGymId)"
+                    )
+                }
             } header: {
                 Text("Simulate Deep Links")
             } footer: {
@@ -151,15 +191,19 @@ struct DeepLinkSimulatorView: View {
                 Text("Test queue stability with multiple links. Routing should remain stable without stacking duplicates.")
             }
             
-            // Transaction ID Configuration
+            // Configuration Section
             Section {
                 TextField("Transaction ID", text: $customTransactionId)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                
+                TextField("Gym ID", text: $customGymId)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
             } header: {
                 Text("Configuration")
             } footer: {
-                Text("Set a custom transaction ID for the Wallet Transaction deep link. Use 'txn_001' through 'txn_015' for mock transactions.")
+                Text("Set custom IDs for deep links.\n• Transaction: 'txn_001' through 'txn_015'\n• Gym: 'gym_1' through 'gym_6'")
             }
         }
         .navigationTitle("Deep Link Simulator")

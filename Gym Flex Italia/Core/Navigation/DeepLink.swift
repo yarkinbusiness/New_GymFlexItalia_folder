@@ -23,5 +23,14 @@ enum DeepLink: Hashable {
     
     /// Navigate to settings screen
     case settings
+    
+    /// Navigate to booking history
+    case bookingHistory
+    
+    /// Navigate to a specific booking detail
+    case bookingDetail(String)
+    
+    /// Navigate to a specific gym detail
+    case gymDetail(String)
 }
 

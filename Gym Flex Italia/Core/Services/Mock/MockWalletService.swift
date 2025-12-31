@@ -3,11 +3,13 @@
 //  Gym Flex Italia
 //
 //  Mock implementation of WalletServiceProtocol for demo/testing
+//  Uses MockDataStore for consistent gym data and reference codes.
 //
 
 import Foundation
 
 /// Mock wallet service that simulates wallet operations with realistic delays
+/// All gym references come from MockDataStore for consistency
 final class MockWalletService: WalletServiceProtocol {
     
     // MARK: - Mock State (in-memory persistence during session)
@@ -18,14 +20,11 @@ final class MockWalletService: WalletServiceProtocol {
     /// List of transactions
     private var mockTransactions: [WalletTransaction]
     
-    /// Mock user ID
-    private let mockUserId = "user_demo_001"
-    
     // MARK: - Initialization
     
     init() {
         // Generate initial mock transactions
-        self.mockTransactions = MockWalletService.generateInitialTransactions(userId: mockUserId)
+        self.mockTransactions = MockWalletService.generateInitialTransactions()
     }
     
     // MARK: - WalletServiceProtocol
@@ -63,13 +62,13 @@ final class MockWalletService: WalletServiceProtocol {
         balanceCents += amountCents
         let balanceAfter = Double(balanceCents) / 100.0
         
-        // Generate reference code
-        let referenceCode = generateReferenceCode()
+        // Generate reference code using MockDataStore
+        let referenceCode = MockDataStore.makeWalletRef()
         
         // Create new transaction
         let transaction = WalletTransaction(
             id: UUID().uuidString,
-            userId: mockUserId,
+            userId: MockDataStore.mockUserId,
             type: .deposit,
             amount: Double(amountCents) / 100.0,
             currency: "EUR",
@@ -101,29 +100,16 @@ final class MockWalletService: WalletServiceProtocol {
         try await Task.sleep(nanoseconds: UInt64(delayMs) * 1_000_000)
     }
     
-    /// Generates a reference code like "WL-XXXXXX"
-    private func generateReferenceCode() -> String {
-        let chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-        let suffix = String((0..<6).map { _ in chars.randomElement()! })
-        return "WL-\(suffix)"
-    }
-    
     // MARK: - Mock Data Generation
     
-    /// Generates initial list of 15 realistic transactions
-    private static func generateInitialTransactions(userId: String) -> [WalletTransaction] {
+    /// Generates initial list of 15 realistic transactions using gyms from MockDataStore
+    private static func generateInitialTransactions() -> [WalletTransaction] {
         var transactions: [WalletTransaction] = []
         var runningBalance: Double = 45.00 // Current balance
         
-        // Transaction templates
-        let gymNames = [
-            "FitLife Milano Centro",
-            "PowerGym Torino",
-            "CrossFit Roma",
-            "Wellness Club Firenze",
-            "Iron Temple Napoli",
-            "Yoga Space Venezia"
-        ]
+        let userId = MockDataStore.mockUserId
+        let dataStore = MockDataStore.shared
+        let gyms = dataStore.gyms
         
         // Generate transactions going back in time
         let calendar = Calendar.current
@@ -151,9 +137,10 @@ final class MockWalletService: WalletServiceProtocol {
             processedAt: currentDate
         ))
         
-        // Transaction 2: Booking payment (yesterday)
+        // Transaction 2: Booking payment (yesterday) - Gym 1
         currentDate = calendar.date(byAdding: .day, value: -1, to: currentDate)!
-        let booking1Amount = 8.50
+        let gym1 = gyms[0] // gym_1: FitRoma Center
+        let booking1Amount = gym1.pricePerHour
         runningBalance -= topUp1Amount // Go back to previous balance
         transactions.append(WalletTransaction(
             id: "txn_002",
@@ -161,13 +148,13 @@ final class MockWalletService: WalletServiceProtocol {
             type: .payment,
             amount: booking1Amount,
             currency: "EUR",
-            description: gymNames[0],
-            bookingId: "booking_001",
-            gymId: "gym_001",
-            gymName: gymNames[0],
+            description: "Booking at \(gym1.name)",
+            bookingId: "booking_completed_001",
+            gymId: gym1.id,
+            gymName: gym1.name,
             paymentMethod: .wallet,
             paymentProvider: nil,
-            paymentTransactionId: "BK-XY7891",
+            paymentTransactionId: "GF-XY7891",
             balanceBefore: runningBalance + booking1Amount,
             balanceAfter: runningBalance,
             status: .completed,
@@ -175,9 +162,10 @@ final class MockWalletService: WalletServiceProtocol {
             processedAt: currentDate
         ))
         
-        // Transaction 3: Refund (2 days ago)
+        // Transaction 3: Refund (2 days ago) - Gym 2
         currentDate = calendar.date(byAdding: .day, value: -1, to: currentDate)!
-        let refundAmount = 6.00
+        let gym2 = gyms[1] // gym_2: Colosseo Fitness Lab
+        let refundAmount = gym2.pricePerHour
         runningBalance += booking1Amount
         transactions.append(WalletTransaction(
             id: "txn_003",
@@ -185,13 +173,13 @@ final class MockWalletService: WalletServiceProtocol {
             type: .refund,
             amount: refundAmount,
             currency: "EUR",
-            description: "Cancelled booking refund",
+            description: "Cancelled booking refund - \(gym2.name)",
             bookingId: "booking_cancelled_001",
-            gymId: "gym_002",
-            gymName: gymNames[1],
+            gymId: gym2.id,
+            gymName: gym2.name,
             paymentMethod: .wallet,
             paymentProvider: nil,
-            paymentTransactionId: "RF-QW4523",
+            paymentTransactionId: "GF-QW4523",
             balanceBefore: runningBalance - refundAmount,
             balanceAfter: runningBalance,
             status: .completed,
@@ -199,9 +187,10 @@ final class MockWalletService: WalletServiceProtocol {
             processedAt: currentDate
         ))
         
-        // Transaction 4: Booking payment (3 days ago)
+        // Transaction 4: Booking payment (3 days ago) - Gym 3
         currentDate = calendar.date(byAdding: .day, value: -1, to: currentDate)!
-        let booking2Amount = 12.00
+        let gym3 = gyms[2] // gym_3: Trastevere Active Hub
+        let booking2Amount = gym3.pricePerHour * 2 // 2 hours
         runningBalance -= refundAmount
         transactions.append(WalletTransaction(
             id: "txn_004",
@@ -209,13 +198,13 @@ final class MockWalletService: WalletServiceProtocol {
             type: .payment,
             amount: booking2Amount,
             currency: "EUR",
-            description: gymNames[2],
-            bookingId: "booking_002",
-            gymId: "gym_003",
-            gymName: gymNames[2],
+            description: "Booking at \(gym3.name)",
+            bookingId: "booking_completed_002",
+            gymId: gym3.id,
+            gymName: gym3.name,
             paymentMethod: .wallet,
             paymentProvider: nil,
-            paymentTransactionId: "BK-PL8920",
+            paymentTransactionId: "GF-PL8920",
             balanceBefore: runningBalance + booking2Amount,
             balanceAfter: runningBalance,
             status: .completed,
@@ -247,9 +236,10 @@ final class MockWalletService: WalletServiceProtocol {
             processedAt: currentDate
         ))
         
-        // Transaction 6: Booking (1 week ago)
+        // Transaction 6: Booking (1 week ago) - Gym 4
         currentDate = calendar.date(byAdding: .day, value: -2, to: currentDate)!
-        let booking3Amount = 9.00
+        let gym4 = gyms[3] // gym_4: Pantheon Power Gym
+        let booking3Amount = gym4.pricePerHour
         runningBalance -= topUp2Amount
         transactions.append(WalletTransaction(
             id: "txn_006",
@@ -257,13 +247,13 @@ final class MockWalletService: WalletServiceProtocol {
             type: .payment,
             amount: booking3Amount,
             currency: "EUR",
-            description: gymNames[3],
-            bookingId: "booking_003",
-            gymId: "gym_004",
-            gymName: gymNames[3],
+            description: "Booking at \(gym4.name)",
+            bookingId: "booking_completed_003",
+            gymId: gym4.id,
+            gymName: gym4.name,
             paymentMethod: .wallet,
             paymentProvider: nil,
-            paymentTransactionId: "BK-JK3344",
+            paymentTransactionId: "GF-JK3344",
             balanceBefore: runningBalance + booking3Amount,
             balanceAfter: runningBalance,
             status: .completed,
@@ -295,9 +285,10 @@ final class MockWalletService: WalletServiceProtocol {
             processedAt: currentDate
         ))
         
-        // Transaction 8: Payment (10 days ago)
+        // Transaction 8: Payment (10 days ago) - Gym 5
         currentDate = calendar.date(byAdding: .day, value: -2, to: currentDate)!
-        let booking4Amount = 7.50
+        let gym5 = gyms[4] // gym_5: Vatican City Fitness
+        let booking4Amount = gym5.pricePerHour
         runningBalance -= bonusAmount
         transactions.append(WalletTransaction(
             id: "txn_008",
@@ -305,13 +296,13 @@ final class MockWalletService: WalletServiceProtocol {
             type: .payment,
             amount: booking4Amount,
             currency: "EUR",
-            description: gymNames[4],
-            bookingId: "booking_004",
-            gymId: "gym_005",
-            gymName: gymNames[4],
+            description: "Booking at \(gym5.name)",
+            bookingId: "booking_completed_004",
+            gymId: gym5.id,
+            gymName: gym5.name,
             paymentMethod: .wallet,
             paymentProvider: nil,
-            paymentTransactionId: "BK-RT9087",
+            paymentTransactionId: "GF-RT9087",
             balanceBefore: runningBalance + booking4Amount,
             balanceAfter: runningBalance,
             status: .completed,
@@ -319,9 +310,10 @@ final class MockWalletService: WalletServiceProtocol {
             processedAt: currentDate
         ))
         
-        // Transaction 9: Payment (12 days ago)
+        // Transaction 9: Payment (12 days ago) - Gym 6
         currentDate = calendar.date(byAdding: .day, value: -2, to: currentDate)!
-        let booking5Amount = 11.00
+        let gym6 = gyms[5] // gym_6: Spanish Steps Strength
+        let booking5Amount = gym6.pricePerHour
         runningBalance += booking4Amount
         transactions.append(WalletTransaction(
             id: "txn_009",
@@ -329,13 +321,13 @@ final class MockWalletService: WalletServiceProtocol {
             type: .payment,
             amount: booking5Amount,
             currency: "EUR",
-            description: gymNames[5],
-            bookingId: "booking_005",
-            gymId: "gym_006",
-            gymName: gymNames[5],
+            description: "Booking at \(gym6.name)",
+            bookingId: "booking_completed_005",
+            gymId: gym6.id,
+            gymName: gym6.name,
             paymentMethod: .wallet,
             paymentProvider: nil,
-            paymentTransactionId: "BK-UV2211",
+            paymentTransactionId: "GF-UV2211",
             balanceBefore: runningBalance + booking5Amount,
             balanceAfter: runningBalance,
             status: .completed,
@@ -367,9 +359,9 @@ final class MockWalletService: WalletServiceProtocol {
             processedAt: currentDate
         ))
         
-        // Transaction 11: Payment (16 days ago)
+        // Transaction 11: Payment (16 days ago) - Gym 1
         currentDate = calendar.date(byAdding: .day, value: -2, to: currentDate)!
-        let booking6Amount = 10.00
+        let booking6Amount = gyms[0].pricePerHour
         runningBalance -= topUp3Amount
         transactions.append(WalletTransaction(
             id: "txn_011",
@@ -377,13 +369,13 @@ final class MockWalletService: WalletServiceProtocol {
             type: .payment,
             amount: booking6Amount,
             currency: "EUR",
-            description: gymNames[0],
-            bookingId: "booking_006",
-            gymId: "gym_001",
-            gymName: gymNames[0],
+            description: "Booking at \(gyms[0].name)",
+            bookingId: "booking_completed_006",
+            gymId: gyms[0].id,
+            gymName: gyms[0].name,
             paymentMethod: .wallet,
             paymentProvider: nil,
-            paymentTransactionId: "BK-GH5566",
+            paymentTransactionId: "GF-GH5566",
             balanceBefore: runningBalance + booking6Amount,
             balanceAfter: runningBalance,
             status: .completed,
@@ -438,9 +430,9 @@ final class MockWalletService: WalletServiceProtocol {
             processedAt: nil
         ))
         
-        // Transaction 14: Payment (22 days ago)
+        // Transaction 14: Payment (22 days ago) - Gym 3
         currentDate = calendar.date(byAdding: .day, value: -2, to: currentDate)!
-        let booking7Amount = 8.00
+        let booking7Amount = gyms[2].pricePerHour
         runningBalance -= topUp4Amount
         transactions.append(WalletTransaction(
             id: "txn_014",
@@ -448,13 +440,13 @@ final class MockWalletService: WalletServiceProtocol {
             type: .payment,
             amount: booking7Amount,
             currency: "EUR",
-            description: gymNames[2],
-            bookingId: "booking_007",
-            gymId: "gym_003",
-            gymName: gymNames[2],
+            description: "Booking at \(gyms[2].name)",
+            bookingId: "booking_completed_007",
+            gymId: gyms[2].id,
+            gymName: gyms[2].name,
             paymentMethod: .wallet,
             paymentProvider: nil,
-            paymentTransactionId: "BK-IJ7788",
+            paymentTransactionId: "GF-IJ7788",
             balanceBefore: runningBalance + booking7Amount,
             balanceAfter: runningBalance,
             status: .completed,
@@ -489,4 +481,3 @@ final class MockWalletService: WalletServiceProtocol {
         return transactions
     }
 }
-
