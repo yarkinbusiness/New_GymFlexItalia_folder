@@ -136,26 +136,84 @@ struct BookingDetailView: View {
                 .font(AppFonts.h5)
                 .foregroundColor(.primary)
             
-            // QR Placeholder
-            ZStack {
-                RoundedRectangle(cornerRadius: CornerRadii.lg)
-                    .fill(Color(.tertiarySystemBackground))
+            // Real QR Code
+            if let qrImage = QRCodeGenerator.makeCheckInQRImage(for: booking) {
+                qrImage
+                    .interpolation(.none)
+                    .resizable()
+                    .scaledToFit()
                     .frame(width: 200, height: 200)
-                
-                VStack(spacing: Spacing.sm) {
-                    Image(systemName: "qrcode")
-                        .font(.system(size: 80))
-                        .foregroundColor(.secondary)
+                    .padding(Spacing.md)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: CornerRadii.lg))
+                    .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
+            } else {
+                // Fallback placeholder
+                ZStack {
+                    RoundedRectangle(cornerRadius: CornerRadii.lg)
+                        .fill(Color(.tertiarySystemBackground))
+                        .frame(width: 200, height: 200)
                     
-                    Text("QR Code Placeholder")
+                    VStack(spacing: Spacing.sm) {
+                        Image(systemName: "qrcode")
+                            .font(.system(size: 80))
+                            .foregroundColor(.secondary)
+                        
+                        Text("QR Code")
+                            .font(AppFonts.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            
+            // Check-in Code Display
+            if let checkInCode = booking.checkinCode {
+                VStack(spacing: Spacing.xs) {
+                    Text("Check-in Code")
                         .font(AppFonts.caption)
                         .foregroundColor(.secondary)
+                        .textCase(.uppercase)
+                        .tracking(1)
+                    
+                    HStack(spacing: Spacing.sm) {
+                        Text(checkInCode)
+                            .font(.system(.title3, design: .monospaced))
+                            .fontWeight(.bold)
+                            .foregroundColor(.primary)
+                        
+                        Button {
+                            DemoTapLogger.log("BookingDetail.CopyCheckInCode")
+                            UIPasteboard.general.string = checkInCode
+                            showCopiedAlert = true
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                                .font(.system(size: 14))
+                                .foregroundColor(AppColors.brand)
+                        }
+                    }
                 }
             }
             
             Text("Show this code at the gym entrance")
                 .font(AppFonts.caption)
                 .foregroundColor(.secondary)
+            
+            // Check In Button
+            Button {
+                DemoTapLogger.log("BookingDetail.CheckIn")
+                router.pushCheckIn(bookingId: booking.id)
+            } label: {
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                    Text("Check In Now")
+                }
+                .font(AppFonts.label)
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Spacing.md)
+                .background(AppGradients.primary)
+                .clipShape(RoundedRectangle(cornerRadius: CornerRadii.md))
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(Spacing.lg)

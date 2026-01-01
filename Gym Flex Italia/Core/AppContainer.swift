@@ -29,6 +29,9 @@ final class AppContainer {
     /// Booking history services (fetch bookings, cancel)
     let bookingHistoryService: BookingHistoryServiceProtocol
     
+    /// Check-in services (validate codes, mark checked-in)
+    let checkInService: CheckInServiceProtocol
+    
     // MARK: - Initialization
     
     init(
@@ -37,7 +40,8 @@ final class AppContainer {
         profileService: ProfileServiceProtocol,
         notificationService: NotificationServiceProtocol,
         walletService: WalletServiceProtocol,
-        bookingHistoryService: BookingHistoryServiceProtocol
+        bookingHistoryService: BookingHistoryServiceProtocol,
+        checkInService: CheckInServiceProtocol
     ) {
         self.gymService = gymService
         self.bookingService = bookingService
@@ -45,6 +49,7 @@ final class AppContainer {
         self.notificationService = notificationService
         self.walletService = walletService
         self.bookingHistoryService = bookingHistoryService
+        self.checkInService = checkInService
     }
     
     // MARK: - Factory Methods
@@ -52,12 +57,16 @@ final class AppContainer {
     /// Creates a container configured for demo/development mode
     /// Uses mock services that return realistic fake data
     static func demo() -> AppContainer {
+        // Ensure MockBookingStore is seeded
+        MockBookingStore.shared.seedIfNeeded()
+        
         let gymService = MockGymService()
         let bookingService = MockBookingService(gymService: gymService)
         let profileService = MockProfileService()
         let notificationService = MockNotificationService()
         let walletService = MockWalletService()
         let bookingHistoryService = MockBookingHistoryService()
+        let checkInService = MockCheckInService()
         
         return AppContainer(
             gymService: gymService,
@@ -65,19 +74,24 @@ final class AppContainer {
             profileService: profileService,
             notificationService: notificationService,
             walletService: walletService,
-            bookingHistoryService: bookingHistoryService
+            bookingHistoryService: bookingHistoryService,
+            checkInService: checkInService
         )
     }
     
     /// Creates a container configured for live/production mode
     /// Uses real iOS notification system
     static func live() -> AppContainer {
+        // Ensure MockBookingStore is seeded
+        MockBookingStore.shared.seedIfNeeded()
+        
         let gymService = MockGymService() // TODO: Replace with real API service
         let bookingService = MockBookingService(gymService: gymService)
         let profileService = MockProfileService()
         let notificationService = LocalNotificationService() // Real iOS notifications
         let walletService = MockWalletService() // TODO: Replace with real wallet service
         let bookingHistoryService = MockBookingHistoryService() // TODO: Replace with real service
+        let checkInService = MockCheckInService() // TODO: Replace with real check-in service
         
         return AppContainer(
             gymService: gymService,
@@ -85,7 +99,8 @@ final class AppContainer {
             profileService: profileService,
             notificationService: notificationService,
             walletService: walletService,
-            bookingHistoryService: bookingHistoryService
+            bookingHistoryService: bookingHistoryService,
+            checkInService: checkInService
         )
     }
 }

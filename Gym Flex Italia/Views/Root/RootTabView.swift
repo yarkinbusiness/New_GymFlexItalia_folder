@@ -46,7 +46,7 @@ struct RootTabView: View {
                     case .groups:
                         GroupsView()
                     case .checkIn:
-                        QRCheckinView(bookingId: "") // Will show empty state if no booking
+                        CheckInHomeView()
                     case .profile:
                         ProfileView()
                     }
@@ -78,6 +78,8 @@ struct RootTabView: View {
                     WalletFullView()
                 case .walletTransactionDetail(let transactionId):
                     TransactionDetailView(transactionId: transactionId)
+                case .checkIn(let bookingId):
+                    CheckInView(bookingId: bookingId)
                 case .deepLinkSimulator:
                     DeepLinkSimulatorView()
                 }

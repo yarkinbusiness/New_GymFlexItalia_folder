@@ -18,6 +18,7 @@ enum AppRoute: Hashable {
     case settings
     case wallet
     case walletTransactionDetail(transactionId: String)
+    case checkIn(bookingId: String)
     case deepLinkSimulator
 }
 
@@ -101,6 +102,11 @@ final class AppRouter: ObservableObject {
     /// Navigate to wallet transaction detail view
     func pushWalletTransactionDetail(transactionId: String) {
         appendRoute(.walletTransactionDetail(transactionId: transactionId))
+    }
+    
+    /// Navigate to check-in view
+    func pushCheckIn(bookingId: String) {
+        appendRoute(.checkIn(bookingId: bookingId))
     }
     
     /// Pop the top view from the navigation stack

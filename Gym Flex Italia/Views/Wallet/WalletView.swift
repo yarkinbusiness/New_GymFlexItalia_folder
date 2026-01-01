@@ -13,9 +13,14 @@ struct WalletFullView: View {
     @Environment(\.appContainer) private var appContainer
     @EnvironmentObject var router: AppRouter
     
+    /// Single source of truth for wallet data
+    @ObservedObject private var walletStore = WalletStore.shared
+    
     @StateObject private var viewModel = WalletFullViewModel()
     
     @State private var showTopUpSheet = false
+    @State private var hasLoadAttempted = false
+    @State private var containerStatus: String = "unknown"
     
     var body: some View {
         ZStack {
@@ -23,8 +28,11 @@ struct WalletFullView: View {
             AppGradients.background
                 .ignoresSafeArea()
             
-            if viewModel.isLoading {
+            if viewModel.isLoading && !hasLoadAttempted {
                 loadingView
+            } else if let errorMessage = viewModel.errorMessage, viewModel.balance == nil {
+                // Show full error state if we have no data
+                errorStateView(errorMessage)
             } else {
                 mainContent
             }
@@ -50,12 +58,118 @@ struct WalletFullView: View {
             topUpSheet
         }
         .task {
-            await viewModel.load(using: appContainer.walletService)
+            await loadWallet()
+        }
+        .onAppear {
+            // Validate container on appear
+            validateContainer()
         }
         .refreshable {
-            await viewModel.refresh(using: appContainer.walletService)
+            await loadWallet()
         }
     }
+    
+    // MARK: - Wallet Loading
+    
+    private func loadWallet() async {
+        print("💳 WALLET: entering WalletFullView.loadWallet()")
+        print("💳 WALLET: walletService=\(type(of: appContainer.walletService))")
+        print("💳 WALLET: containerStatus=\(containerStatus)")
+        print("💳 WALLET: calling load()...")
+        
+        hasLoadAttempted = true
+        
+        await viewModel.load(using: appContainer.walletService)
+        
+        if let error = viewModel.errorMessage {
+            print("❌ WALLET: error=\(error)")
+        } else {
+            print("✅ WALLET: loaded balance=\(String(describing: viewModel.balance?.amount)) transactions=\(viewModel.transactions.count)")
+        }
+    }
+    
+    private func validateContainer() {
+        // Check if appContainer is properly injected
+        let serviceType = String(describing: type(of: appContainer.walletService))
+        containerStatus = serviceType.isEmpty ? "NOT_INJECTED" : serviceType
+        print("💳 WALLET: onAppear containerStatus=\(containerStatus)")
+    }
+    
+    // MARK: - Error State View
+    
+    private func errorStateView(_ message: String) -> some View {
+        VStack(spacing: Spacing.lg) {
+            // Error icon
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 48))
+                .foregroundColor(.orange)
+            
+            // Error title
+            Text("Unable to Load Wallet")
+                .font(AppFonts.h4)
+                .foregroundColor(AppColors.textHigh)
+            
+            // Error message
+            Text(message)
+                .font(AppFonts.body)
+                .foregroundColor(AppColors.textDim)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Spacing.xl)
+            
+            // Retry button
+            Button {
+                DemoTapLogger.log("Wallet.Retry")
+                Task {
+                    await loadWallet()
+                }
+            } label: {
+                HStack {
+                    Image(systemName: "arrow.clockwise")
+                    Text("Try Again")
+                }
+                .font(AppFonts.label)
+                .foregroundColor(.white)
+                .frame(maxWidth: 200)
+                .padding(.vertical, Spacing.md)
+                .background(AppGradients.primary)
+                .clipShape(RoundedRectangle(cornerRadius: CornerRadii.md))
+            }
+            
+            // DEBUG diagnostics
+            #if DEBUG
+            diagnosticsBanner
+            #endif
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    // MARK: - Debug Diagnostics Banner
+    
+    #if DEBUG
+    private var diagnosticsBanner: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text("DEBUG DIAGNOSTICS")
+                .font(AppFonts.caption)
+                .fontWeight(.bold)
+                .foregroundColor(.orange)
+            
+            Group {
+                Text("• appContainer injected: \(containerStatus != "NOT_INJECTED" ? "YES" : "NO")")
+                Text("• walletService type: \(containerStatus)")
+                Text("• balance: \(viewModel.balance?.formattedBalance ?? "nil")")
+                Text("• transactions count: \(viewModel.transactions.count)")
+                Text("• errorMessage: \(viewModel.errorMessage ?? "nil")")
+                Text("• hasLoadAttempted: \(hasLoadAttempted ? "YES" : "NO")")
+            }
+            .font(.system(size: 11, design: .monospaced))
+            .foregroundColor(.orange)
+        }
+        .padding(Spacing.md)
+        .background(Color.orange.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: CornerRadii.md))
+        .padding(.top, Spacing.lg)
+    }
+    #endif
     
     // MARK: - Loading View
     
@@ -66,6 +180,12 @@ struct WalletFullView: View {
             Text("Loading wallet...")
                 .font(AppFonts.body)
                 .foregroundColor(AppColors.textDim)
+            
+            #if DEBUG
+            Text("walletService: \(containerStatus)")
+                .font(AppFonts.caption)
+                .foregroundColor(.orange)
+            #endif
         }
     }
     
@@ -74,6 +194,23 @@ struct WalletFullView: View {
     private var mainContent: some View {
         ScrollView {
             VStack(spacing: Spacing.xl) {
+                // DEBUG: Success diagnostics banner
+                #if DEBUG
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("DEBUG: Wallet Loaded ✅ (using WalletStore)")
+                        .font(AppFonts.caption)
+                        .foregroundColor(.green)
+                    Text("balance: \(walletStore.formattedBalance) | tx: \(walletStore.transactions.count) | persisted: ✅")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(.green)
+                }
+                .padding(Spacing.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.green.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: CornerRadii.sm))
+                .padding(.horizontal, Spacing.lg)
+                #endif
+                
                 // Error Banner
                 if let error = viewModel.errorMessage {
                     InlineErrorBanner(
@@ -122,12 +259,13 @@ struct WalletFullView: View {
                     .font(.system(size: 32, weight: .semibold))
                     .foregroundColor(AppColors.textHigh)
                 
-                Text(String(format: "%.2f", viewModel.balance?.amount ?? 0))
+                // Use walletStore directly for real-time balance
+                Text(String(format: "%.2f", walletStore.balance))
                     .font(.system(size: 56, weight: .bold))
                     .foregroundColor(AppColors.textHigh)
             }
             
-            Text(viewModel.balance?.currency ?? "EUR")
+            Text(walletStore.currency)
                 .font(AppFonts.caption)
                 .foregroundColor(AppColors.textDim)
         }
@@ -187,9 +325,10 @@ struct WalletFullView: View {
                 .foregroundColor(AppColors.textHigh)
                 .padding(.horizontal, Spacing.lg)
             
-            if viewModel.hasTransactions {
+            // Use walletStore directly for real-time transactions
+            if walletStore.hasTransactions {
                 LazyVStack(spacing: Spacing.sm) {
-                    ForEach(viewModel.transactions) { transaction in
+                    ForEach(walletStore.transactions) { transaction in
                         TransactionRow(transaction: transaction) {
                             DemoTapLogger.log("Wallet.Transaction.Tap", context: "id: \(transaction.id)")
                             router.pushWalletTransactionDetail(transactionId: transaction.id)

@@ -31,16 +31,26 @@ final class BookingHistoryViewModel: ObservableObject {
     
     // MARK: - Computed Properties
     
-    /// Upcoming bookings (confirmed and start time in future)
+    /// Upcoming bookings (not cancelled and end time in future)
+    /// Includes bookings in progress (started but not ended)
     var upcomingBookings: [Booking] {
-        bookings.filter { $0.status == .confirmed && $0.startTime > Date() }
-            .sorted { $0.startTime < $1.startTime }
+        let now = Date()
+        return bookings.filter { booking in
+            // Not cancelled
+            guard booking.status != .cancelled else { return false }
+            // Session hasn't ended yet (endTime > now)
+            return booking.endTime > now
+        }
+        .sorted { $0.startTime < $1.startTime }
     }
     
-    /// Past bookings (completed, cancelled, or past start time)
+    /// Past bookings (completed, cancelled, or already ended)
     var pastBookings: [Booking] {
-        bookings.filter { $0.status != .confirmed || $0.startTime <= Date() }
-            .sorted { $0.startTime > $1.startTime }
+        let now = Date()
+        return bookings.filter { booking in
+            booking.status == .cancelled || booking.status == .completed || booking.endTime <= now
+        }
+        .sorted { $0.startTime > $1.startTime }
     }
     
     /// Whether we have any bookings
