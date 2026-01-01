@@ -4,14 +4,20 @@
 //
 //  Created by Yarkin Yavuz on 11/14/25.
 //
+//  Home tab - uses HomeViewModel with canonical data stores.
+//  No placeholder data - only real data from MockBookingStore and MockDataStore.
+//
 
 import SwiftUI
+import CoreLocation
 
-/// Main dashboard view matching LED design
+/// Main dashboard/home view using canonical data stores
 struct DashboardView: View {
     
-    @StateObject private var viewModel = DashboardViewModel()
+    @StateObject private var viewModel = HomeViewModel()
     @EnvironmentObject var router: AppRouter
+    @EnvironmentObject var locationService: LocationService
+    @Environment(\.appContainer) var appContainer
     
     var body: some View {
         ZStack {
@@ -26,11 +32,18 @@ struct DashboardView: View {
                     
                     // Active Session or Quick Book Section
                     if let activeBooking = viewModel.activeBooking {
-                        ActiveSessionSummaryCard(booking: activeBooking) {
-                            // Switch to Check-in tab
-                            DemoTapLogger.log("Dashboard.ActiveSession")
-                            router.switchToTab(.checkIn)
-                        }
+                        ActiveSessionSummaryCard(
+                            booking: activeBooking,
+                            onViewQRCode: {
+                                // Switch to Check-in tab
+                                DemoTapLogger.log("Dashboard.ActiveSession.ViewQR")
+                                router.switchToTab(.checkIn)
+                            },
+                            onCancel: {
+                                // Cancel the active session (no refund)
+                                viewModel.cancelActiveSession()
+                            }
+                        )
                     } else {
                         quickBookSection
                     }
@@ -46,7 +59,8 @@ struct DashboardView: View {
                 .padding(.bottom, 100) // Space for tab bar
             }
             .refreshable {
-                await viewModel.refreshData()
+                viewModel.load()
+                viewModel.refreshNearbyGyms(userLocation: locationService.currentLocation)
             }
             
             if viewModel.isLoading {
@@ -54,9 +68,22 @@ struct DashboardView: View {
             }
         }
         .task {
-            await viewModel.loadDashboard()
+            viewModel.load()
+            viewModel.refreshNearbyGyms(userLocation: locationService.currentLocation)
         }
-        // WalletView is now navigated via router
+        .onChange(of: locationService.currentLocation) { _, newLocation in
+            viewModel.refreshNearbyGyms(userLocation: newLocation)
+        }
+        .alert("Booking Error", isPresented: Binding(
+            get: { viewModel.errorMessage != nil },
+            set: { if !$0 { viewModel.errorMessage = nil } }
+        )) {
+            Button("OK") {
+                viewModel.errorMessage = nil
+            }
+        } message: {
+            Text(viewModel.errorMessage ?? "")
+        }
     }
     
     // MARK: - Header Section
@@ -110,57 +137,116 @@ struct DashboardView: View {
                     .foregroundColor(Color(.secondaryLabel))
             }
             
-            VStack(spacing: Spacing.sm) {
-                QuickBookCard(
-                    duration: "1 Hour",
-                    price: "€2",
-                    isSelected: true,
-                    lastGym: viewModel.lastBookedGym?.name,
-                    lastDate: "5 days ago",
-                    lastPrice: "€4.00"
-                ) {
-                    Task {
-                        DemoTapLogger.log("Dashboard.QuickBook1Hour")
-                        if let _ = await viewModel.createBooking(gymId: "gym_001", duration: 60) {
-                            // Successfully created booking, navigate to Check-in tab
-                            router.switchToTab(.checkIn)
-                        }
+            // Get last booking summary from view model
+            let summary = viewModel.lastBookingSummary()
+            
+            if summary != nil || viewModel.lastUserBooking != nil {
+                // Show Quick Book cards with last booking info
+                VStack(spacing: Spacing.sm) {
+                    QuickBookCard(
+                        duration: "1 Hour",
+                        price: "€2",
+                        isSelected: true,
+                        lastGym: summary?.gymName,
+                        lastDate: summary?.relativeDate ?? "",
+                        lastPrice: summary?.priceString ?? ""
+                    ) {
+                        handleQuickBook(duration: 60)
                     }
+                    
+                    QuickBookCard(
+                        duration: "1.5 Hours",
+                        price: "€3",
+                        isSelected: false,
+                        lastGym: summary?.gymName,
+                        lastDate: summary?.relativeDate ?? "",
+                        lastPrice: summary?.priceString ?? ""
+                    ) {
+                        handleQuickBook(duration: 90)
+                    }
+                    
+                    QuickBookCard(
+                        duration: "2 Hours",
+                        price: "€4",
+                        isSelected: false,
+                        lastGym: summary?.gymName,
+                        lastDate: summary?.relativeDate ?? "",
+                        lastPrice: summary?.priceString ?? ""
+                    ) {
+                        handleQuickBook(duration: 120)
+                    }
+                }
+            } else {
+                // Empty state - no bookings yet
+                emptyQuickBookState
+            }
+        }
+    }
+    
+    /// Empty state for Quick Book when no bookings exist
+    private var emptyQuickBookState: some View {
+        VStack(spacing: Spacing.md) {
+            HStack {
+                Image(systemName: "calendar.badge.plus")
+                    .font(.system(size: 24))
+                    .foregroundColor(AppColors.textDim)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("No recent bookings yet")
+                        .font(AppFonts.body)
+                        .foregroundColor(Color(.label))
+                    
+                    Text("Book your first session to get started")
+                        .font(AppFonts.bodySmall)
+                        .foregroundColor(Color(.secondaryLabel))
                 }
                 
-                QuickBookCard(
-                    duration: "1.5 Hours",
-                    price: "€3",
-                    isSelected: false,
-                    lastGym: viewModel.lastBookedGym?.name,
-                    lastDate: "5 days ago",
-                    lastPrice: "€4.00"
-                ) {
-                    Task {
-                        DemoTapLogger.log("Dashboard.QuickBook1.5Hours")
-                        if let _ = await viewModel.createBooking(gymId: "gym_001", duration: 90) {
-                            // Successfully created booking, navigate to Check-in tab
-                            router.switchToTab(.checkIn)
-                        }
-                    }
+                Spacer()
+            }
+            
+            Button {
+                DemoTapLogger.log("Dashboard.FindGyms")
+                router.switchToTab(.discover)
+            } label: {
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                    Text("Find Gyms")
                 }
-                
-                QuickBookCard(
-                    duration: "2 Hours",
-                    price: "€4",
-                    isSelected: false,
-                    lastGym: viewModel.lastBookedGym?.name,
-                    lastDate: "5 days ago",
-                    lastPrice: "€4.00"
-                ) {
-                    Task {
-                        DemoTapLogger.log("Dashboard.QuickBook2Hours")
-                        if let _ = await viewModel.createBooking(gymId: "gym_001", duration: 120) {
-                            // Successfully created booking, navigate to Check-in tab
-                            router.switchToTab(.checkIn)
-                        }
-                    }
+                .font(AppFonts.label)
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(AppGradients.primary)
+                .clipShape(RoundedRectangle(cornerRadius: CornerRadii.md))
+            }
+        }
+        .padding(Spacing.md)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(CornerRadii.md)
+    }
+    
+    /// Handle Quick Book action
+    private func handleQuickBook(duration: Int) {
+        Task {
+            DemoTapLogger.log("Dashboard.QuickBook\(duration)min")
+            
+            // If we have a last booking, book at the same gym
+            if let lastBooking = viewModel.lastUserBooking {
+                do {
+                    let _ = try await appContainer.bookingService.createBooking(
+                        gymId: lastBooking.gymId,
+                        date: Date(),
+                        duration: duration
+                    )
+                    // Refresh data and navigate to Check-in
+                    viewModel.load()
+                    router.switchToTab(.checkIn)
+                } catch {
+                    viewModel.errorMessage = error.localizedDescription
                 }
+            } else {
+                // No last booking - navigate to Discover
+                router.switchToTab(.discover)
             }
         }
     }
@@ -183,39 +269,76 @@ struct DashboardView: View {
                 .foregroundColor(AppColors.brand)
             }
             
+            // Location permission banner if needed
+            if !viewModel.locationPermissionGranted && locationService.authorizationStatus != .authorizedWhenInUse && locationService.authorizationStatus != .authorizedAlways {
+                locationBanner
+            }
+            
             VStack(spacing: Spacing.sm) {
                 if !viewModel.nearbyGyms.isEmpty {
-                    ForEach(viewModel.nearbyGyms.prefix(3)) { gym in
-                        NearbyGymCard(gym: gym)
+                    ForEach(viewModel.nearbyGyms) { gym in
+                        NearbyGymCardWithDistance(
+                            gym: gym,
+                            distance: viewModel.distanceString(for: gym, from: locationService.currentLocation)
+                        ) {
+                            DemoTapLogger.log("Dashboard.GymCard.\(gym.id)")
+                            router.pushGymDetail(gymId: gym.id)
+                        }
                     }
                 } else {
-                    // Placeholder data
-                    NearbyGymCard(
-                        name: "MaxFit San Lorenzo",
-                        address: "Via dei Sardi 40, Rome",
-                        distance: "2 km",
-                        price: "€3/h",
-                        rating: 4.5
-                    )
-                    
-                    NearbyGymCard(
-                        name: "Elite Fitness Termini",
-                        address: "Via Marsala 89, Rome",
-                        distance: "3 km",
-                        price: "€4/h",
-                        rating: 4.8
-                    )
-                    
-                    NearbyGymCard(
-                        name: "FitnessPro Parioli",
-                        address: "Via Archimede 50, Rome",
-                        distance: "0.5 km",
-                        price: "€4/h",
-                        rating: 4.6
-                    )
+                    // Empty state for nearby gyms
+                    emptyNearbyGymsState
                 }
             }
         }
+    }
+    
+    /// Location permission banner
+    private var locationBanner: some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: "location.slash.fill")
+                .foregroundColor(AppColors.warning)
+            
+            Text("Enable location to see nearest gyms")
+                .font(AppFonts.bodySmall)
+                .foregroundColor(Color(.secondaryLabel))
+            
+            Spacer()
+            
+            Button("Enable") {
+                locationService.requestLocationPermission()
+            }
+            .font(AppFonts.caption)
+            .foregroundColor(AppColors.brand)
+        }
+        .padding(Spacing.sm)
+        .background(AppColors.warning.opacity(0.1))
+        .cornerRadius(CornerRadii.sm)
+    }
+    
+    /// Empty state for nearby gyms
+    private var emptyNearbyGymsState: some View {
+        VStack(spacing: Spacing.sm) {
+            Image(systemName: "mappin.slash")
+                .font(.system(size: 32))
+                .foregroundColor(AppColors.textDim)
+            
+            Text("No gyms found")
+                .font(AppFonts.body)
+                .foregroundColor(Color(.label))
+            
+            Button {
+                router.switchToTab(.discover)
+            } label: {
+                Text("Browse All Gyms")
+                    .font(AppFonts.label)
+                    .foregroundColor(AppColors.brand)
+            }
+        }
+        .padding(Spacing.lg)
+        .frame(maxWidth: .infinity)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(CornerRadii.md)
     }
 
     // MARK: - Recent Activity Section
@@ -228,7 +351,7 @@ struct DashboardView: View {
                 
                 Spacer()
                 
-Button("See All") {
+                Button("See All") {
                     DemoTapLogger.log("Dashboard.SeeAllActivity")
                     router.switchToTab(.profile)
                 }
@@ -236,96 +359,180 @@ Button("See All") {
                 .foregroundColor(AppColors.brand)
             }
             
+            let completedBookings = viewModel.completedBookings()
+            
             VStack(spacing: Spacing.sm) {
-                if !viewModel.recentBookings.isEmpty {
-                    ForEach(viewModel.recentBookings.prefix(3)) { booking in
+                if !completedBookings.isEmpty {
+                    ForEach(completedBookings.prefix(3)) { booking in
                         RecentActivityCard(booking: booking)
                     }
                 } else {
-                    // Placeholder
-                    RecentActivityCard(
-                        gymName: "UrbanFit Villa Borghese",
-                        date: "Yesterday",
-                        price: "€4.00",
-                        status: "Completed"
-                    )
-                    
-                    RecentActivityCard(
-                        gymName: "MaxFit San Lorenzo",
-                        date: "3 days ago",
-                        price: "€3.00",
-                        status: "Completed"
-                    )
+                    // Empty state
+                    emptyRecentActivityState
                 }
             }
         }
+    }
+    
+    /// Empty state for recent activity
+    private var emptyRecentActivityState: some View {
+        VStack(spacing: Spacing.sm) {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.system(size: 32))
+                .foregroundColor(AppColors.textDim)
+            
+            Text("No activity yet")
+                .font(AppFonts.body)
+                .foregroundColor(Color(.label))
+            
+            Button {
+                router.switchToTab(.discover)
+            } label: {
+                Text("Book a Session")
+                    .font(AppFonts.label)
+                    .foregroundColor(AppColors.brand)
+            }
+        }
+        .padding(Spacing.lg)
+        .frame(maxWidth: .infinity)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(CornerRadii.md)
+    }
+}
+
+// MARK: - Nearby Gym Card with Distance
+struct NearbyGymCardWithDistance: View {
+    let gym: Gym
+    let distance: String?
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .center, spacing: Spacing.md) {
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    Text(gym.name)
+                        .font(AppFonts.h5)
+                        .foregroundColor(AppColors.textHigh)
+                    
+                    HStack(spacing: 4) {
+                        Text(gym.address)
+                            .font(AppFonts.bodySmall)
+                            .foregroundColor(AppColors.textDim)
+                            .lineLimit(1)
+                        
+                        if let distance = distance {
+                            Text("• \(distance)")
+                                .font(AppFonts.bodySmall)
+                                .foregroundColor(AppColors.brand)
+                        }
+                    }
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .trailing, spacing: Spacing.xs) {
+                    Text(String(format: "€%.0f/h", gym.pricePerHour))
+                        .font(AppFonts.h5)
+                        .foregroundColor(AppColors.brand)
+                    
+                    if let rating = gym.rating {
+                        HStack(spacing: 4) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(AppColors.warning)
+                            Text(String(format: "%.1f", rating))
+                                .font(AppFonts.bodySmall)
+                                .foregroundColor(AppColors.textHigh)
+                        }
+                    }
+                }
+            }
+            .padding(Spacing.md)
+            .glassBackground(cornerRadius: CornerRadii.md)
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 }
 
 // MARK: - Recent Activity Card
 struct RecentActivityCard: View {
-    var gymName: String?
-    var date: String?
-    var price: String?
-    var status: String?
-    
-    var booking: Booking?
-    
-    init(booking: Booking) {
-        self.booking = booking
-        self.gymName = booking.gymName
-        self.date = booking.startTime.formatted(date: .numeric, time: .omitted)
-        self.price = String(format: "€%.2f", booking.totalPrice)
-        self.status = booking.status.displayName
-    }
-    
-    init(gymName: String, date: String, price: String, status: String) {
-        self.gymName = gymName
-        self.date = date
-        self.price = price
-        self.status = status
-    }
+    let booking: Booking
     
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text(gymName ?? "Gym")
+                Text(booking.gymName ?? "Gym")
                     .font(AppFonts.h5)
                     .foregroundColor(Color(.label))
                 
-                if let date = date {
-                    Text(date)
-                        .font(AppFonts.bodySmall)
-                        .foregroundColor(Color(.secondaryLabel))
-                }
+                Text(formattedDate)
+                    .font(AppFonts.bodySmall)
+                    .foregroundColor(Color(.secondaryLabel))
             }
             
             Spacer()
             
             VStack(alignment: .trailing, spacing: 4) {
-                if let price = price {
-                    Text(price)
-                        .font(AppFonts.h5)
-                        .foregroundColor(Color(.label))
-                }
+                Text(formattedPrice)
+                    .font(AppFonts.h5)
+                    .foregroundColor(Color(.label))
                 
-                if let status = status {
-                    Text(status)
-                        .font(AppFonts.caption)
-                        .foregroundColor(AppColors.danger)
-                        .padding(.horizontal, Spacing.sm)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule()
-                                .fill(AppColors.danger.opacity(0.2))
-                        )
-                }
+                statusBadge
             }
         }
         .padding(Spacing.md)
         .background(Color(.secondarySystemBackground))
         .cornerRadius(CornerRadii.md)
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+    
+    private var formattedDate: String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(booking.startTime) {
+            return "Today"
+        } else if calendar.isDateInYesterday(booking.startTime) {
+            return "Yesterday"
+        } else {
+            return booking.startTime.formatted(date: .abbreviated, time: .omitted)
+        }
+    }
+    
+    private var formattedPrice: String {
+        if booking.totalPrice > 0 {
+            return String(format: "€%.2f", booking.totalPrice)
+        }
+        // Fallback calculation
+        let totalCents = PricingCalculator.priceForBooking(durationMinutes: booking.duration, gymPricePerHour: booking.pricePerHour)
+        return PricingCalculator.formatCentsAsEUR(totalCents)
+    }
+    
+    private var statusBadge: some View {
+        Text(booking.status.displayName)
+            .font(AppFonts.caption)
+            .foregroundColor(statusColor)
+            .padding(.horizontal, Spacing.sm)
+            .padding(.vertical, 4)
+            .background(
+                Capsule()
+                    .fill(statusColor.opacity(0.2))
+            )
+    }
+    
+    private var statusColor: Color {
+        switch booking.status {
+        case .completed:
+            return AppColors.success
+        case .cancelled:
+            return AppColors.danger
+        case .checkedIn:
+            return AppColors.brand
+        case .confirmed:
+            return AppColors.accent
+        case .pending:
+            return AppColors.warning
+        case .noShow:
+            return AppColors.danger
+        }
     }
 }
 
@@ -386,5 +593,6 @@ struct QuickBookCard: View {
 #Preview {
     DashboardView()
         .environmentObject(AppRouter())
+        .environmentObject(LocationService.shared)
         .environment(\.appContainer, .demo())
 }

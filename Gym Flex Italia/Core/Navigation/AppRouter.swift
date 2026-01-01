@@ -12,6 +12,7 @@ import Combine
 enum AppRoute: Hashable {
     case gymDetail(gymId: String)
     case groupDetail(groupId: String)
+    case groupNotFound(message: String)
     case bookingHistory
     case bookingDetail(bookingId: String)
     case editProfile
@@ -20,6 +21,13 @@ enum AppRoute: Hashable {
     case walletTransactionDetail(transactionId: String)
     case checkIn(bookingId: String)
     case deepLinkSimulator
+    case paymentMethods
+    case addCard
+    case accountSecurity
+    case changePassword
+    case devicesSessions
+    case deleteAccount
+    case notificationsPreferences
 }
 
 /// Central navigation state owner for consistent navigation across the app
@@ -208,6 +216,20 @@ final class AppRouter: ObservableObject {
             resetToRoot()
             ensureOnTab(.discover)
             pushIfNotTop(.gymDetail(gymId: gymId))
+            
+        case .groupInvite(let groupId):
+            // Navigate to Groups tab and push group detail (for invite link handling)
+            // First check if the group exists
+            resetToRoot()
+            ensureOnTab(.groups)
+            
+            // Check if group exists in store
+            if MockGroupsStore.shared.groupById(groupId) != nil {
+                pushIfNotTop(.groupDetail(groupId: groupId))
+            } else {
+                // Group not found - show error view
+                pushIfNotTop(.groupNotFound(message: "Group not found or invite expired"))
+            }
         }
     }
     
@@ -243,6 +265,41 @@ final class AppRouter: ObservableObject {
     /// Navigate to the deep link simulator (debug only)
     func pushDeepLinkSimulator() {
         appendRoute(.deepLinkSimulator)
+    }
+    
+    /// Navigate to payment methods
+    func pushPaymentMethods() {
+        appendRoute(.paymentMethods)
+    }
+    
+    /// Navigate to add card form
+    func pushAddCard() {
+        appendRoute(.addCard)
+    }
+    
+    /// Navigate to account security
+    func pushAccountSecurity() {
+        appendRoute(.accountSecurity)
+    }
+    
+    /// Navigate to change password
+    func pushChangePassword() {
+        appendRoute(.changePassword)
+    }
+    
+    /// Navigate to devices and sessions
+    func pushDevicesSessions() {
+        appendRoute(.devicesSessions)
+    }
+    
+    /// Navigate to delete account
+    func pushDeleteAccount() {
+        appendRoute(.deleteAccount)
+    }
+    
+    /// Navigate to notifications preferences
+    func pushNotificationsPreferences() {
+        appendRoute(.notificationsPreferences)
     }
     
     // MARK: - Stack Synchronization (for back gesture handling)

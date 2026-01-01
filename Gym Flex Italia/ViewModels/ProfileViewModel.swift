@@ -2,7 +2,8 @@
 //  ProfileViewModel.swift
 //  Gym Flex Italia
 //
-//  Created by Yarkin Yavuz on 11/14/25.
+//  ViewModel for user profile management.
+//  Uses canonical stores and DI via AppContainer.
 //
 
 import Foundation
@@ -12,42 +13,64 @@ import Combine
 @MainActor
 final class ProfileViewModel: ObservableObject {
     
+    // MARK: - Published State
+    
     @Published var profile: Profile?
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    
+    /// Wallet balance from WalletStore (canonical source)
+    @Published var walletBalanceCents: Int?
+    
+    /// Booking statistics from MockBookingStore (canonical source)
+    @Published var upcomingCount: Int = 0
+    @Published var pastCount: Int = 0
+    @Published var lastBookingSummary: String?
+    
+    // MARK: - Legacy Support (for sections still using these)
+    
     @Published var stats: WorkoutStats?
     @Published var recentBookings: [Booking] = []
     @Published var selectedGoals: Set<FitnessGoal> = []
     @Published var selectedAvatarStyle: AvatarStyle = .warrior
-    
-    @Published var isLoading = false
     @Published var isSaving = false
-    @Published var errorMessage: String?
     @Published var successMessage: String?
     
-    private let profileService = ProfileService.shared
-    private let bookingService = BookingService.shared
-    private let authService = AuthService.shared
+    private var cancellables = Set<AnyCancellable>()
+    
+    // MARK: - Initialization
     
     init() {
-        loadProfile()
+        // Observe WalletStore changes
+        WalletStore.shared.$balanceCents
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] cents in
+                self?.walletBalanceCents = cents
+            }
+            .store(in: &cancellables)
     }
     
-    // MARK: - Load Profile
-    func loadProfile() {
-        Task {
-            await fetchProfile()
-            await fetchStats()
-            await fetchRecentBookings()
-        }
-    }
+    // MARK: - Load Profile (DI via AppContainer)
     
-    private func fetchProfile() async {
+    /// Load profile and related data using AppContainer services
+    func load(using container: AppContainer) async {
         isLoading = true
         errorMessage = nil
         
         do {
-            profile = try await profileService.fetchProfile()
+            // Fetch profile from profileService
+            profile = try await container.profileService.fetchCurrentProfile()
+            
+            // Set up avatar/goals from profile
             selectedGoals = Set(profile?.fitnessGoals ?? [])
             selectedAvatarStyle = profile?.avatarStyle ?? .warrior
+            
+            // Load wallet balance from canonical WalletStore
+            walletBalanceCents = WalletStore.shared.balanceCents
+            
+            // Load booking statistics from canonical MockBookingStore
+            loadBookingStatistics()
+            
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -55,90 +78,73 @@ final class ProfileViewModel: ObservableObject {
         isLoading = false
     }
     
-    private func fetchStats() async {
-        do {
-            stats = try await profileService.fetchWorkoutStats()
-        } catch {
-            print("Failed to fetch stats: \(error)")
-        }
+    /// Retry loading after error
+    func retry(using container: AppContainer) async {
+        await load(using: container)
     }
     
-    private func fetchRecentBookings() async {
-        do {
-            let allBookings = try await bookingService.fetchBookings()
-            recentBookings = allBookings
-                .sorted { $0.startTime > $1.startTime }
-                .prefix(10)
-                .map { $0 }
-        } catch {
-            print("Failed to fetch bookings: \(error)")
-        }
+    /// Refresh data (pull-to-refresh)
+    func refresh(using container: AppContainer) async {
+        await load(using: container)
     }
     
-    // MARK: - Update Profile
-    func updateProfile(fullName: String?, phoneNumber: String?, dateOfBirth: Date?, gender: Profile.Gender?) async {
-        guard var updatedProfile = profile else { return }
+    /// Legacy refresh method (for backward compatibility)
+    func refresh() async {
+        // Refresh booking statistics from store
+        loadBookingStatistics()
         
-        isSaving = true
-        errorMessage = nil
-        successMessage = nil
-        
-        updatedProfile.fullName = fullName
-        updatedProfile.phoneNumber = phoneNumber
-        updatedProfile.dateOfBirth = dateOfBirth
-        updatedProfile.gender = gender
-        
-        do {
-            profile = try await profileService.updateProfile(updatedProfile)
-            successMessage = "Profile updated successfully"
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-        
-        isSaving = false
+        // Refresh wallet balance
+        walletBalanceCents = WalletStore.shared.balanceCents
     }
     
-    // MARK: - Update Goals
-    func updateFitnessGoals() async {
-        isSaving = true
-        errorMessage = nil
-        successMessage = nil
-        
-        do {
-            profile = try await profileService.updateFitnessGoals(Array(selectedGoals))
-            successMessage = "Goals updated successfully"
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-        
-        isSaving = false
-    }
+    // MARK: - Booking Statistics (from canonical MockBookingStore)
     
-    func toggleGoal(_ goal: FitnessGoal) {
-        if selectedGoals.contains(goal) {
-            selectedGoals.remove(goal)
+    private func loadBookingStatistics() {
+        let store = MockBookingStore.shared
+        let now = Date()
+        
+        // Only count USER bookings (not seeded demo data)
+        let userBookings = store.userBookings()
+        
+        // Upcoming: endTime > now AND not cancelled
+        upcomingCount = userBookings.filter { booking in
+            booking.status != .cancelled && booking.endTime > now
+        }.count
+        
+        // Past: endTime <= now OR status is completed/cancelled
+        pastCount = userBookings.filter { booking in
+            booking.endTime <= now || booking.status == .completed || booking.status == .cancelled
+        }.count
+        
+        // Last booking summary: most recent user booking
+        if let lastBooking = store.lastUserBooking() {
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "MMM d"
+            let dateString = dateFormatter.string(from: lastBooking.startTime)
+            lastBookingSummary = "\(lastBooking.gymName) • \(dateString)"
         } else {
-            selectedGoals.insert(goal)
-        }
-    }
-    
-    // MARK: - Update Avatar
-    func updateAvatarStyle() async {
-        isSaving = true
-        errorMessage = nil
-        successMessage = nil
-        
-        do {
-            profile = try await profileService.updateAvatarStyle(selectedAvatarStyle)
-            successMessage = "Avatar style updated"
-        } catch {
-            errorMessage = error.localizedDescription
+            lastBookingSummary = nil
         }
         
-        isSaving = false
+        print("👤 ProfileViewModel.loadBookingStatistics: upcoming=\(upcomingCount), past=\(pastCount)")
     }
     
-    // MARK: - Avatar Progression
+    // MARK: - Computed Properties
+    
+    /// Formatted wallet balance string
+    var formattedWalletBalance: String {
+        guard let cents = walletBalanceCents else { return "€0.00" }
+        return String(format: "€%.2f", Double(cents) / 100.0)
+    }
+    
+    /// Whether user has any bookings
+    var hasBookings: Bool {
+        upcomingCount > 0 || pastCount > 0
+    }
+    
+    // MARK: - Legacy Methods (for sections still using them)
+    
+    /// Avatar progression info
     var avatarProgression: AvatarProgression? {
         guard let profile = profile else { return nil }
         
@@ -150,7 +156,6 @@ final class ProfileViewModel: ObservableObject {
         )
     }
     
-    // MARK: - Statistics
     var totalWorkoutTime: String {
         guard let stats = stats else { return "0h" }
         let hours = stats.totalMinutes / 60
@@ -165,33 +170,16 @@ final class ProfileViewModel: ObservableObject {
     
     var averageWorkoutsPerWeek: Double {
         guard let stats = stats else { return 0 }
-        // Assuming weeklyWorkouts is for the current week
         return Double(stats.weeklyWorkouts)
     }
     
-    // MARK: - Account Actions
-    func deleteAccount() async {
-        isLoading = true
-        errorMessage = nil
-        
-        do {
-            try await authService.deleteAccount()
-        } catch {
-            errorMessage = error.localizedDescription
+    // MARK: - Goal Management
+    
+    func toggleGoal(_ goal: FitnessGoal) {
+        if selectedGoals.contains(goal) {
+            selectedGoals.remove(goal)
+        } else {
+            selectedGoals.insert(goal)
         }
-        
-        isLoading = false
-    }
-    
-    func signOut() {
-        authService.signOut()
-    }
-    
-    // MARK: - Refresh
-    func refresh() async {
-        await fetchProfile()
-        await fetchStats()
-        await fetchRecentBookings()
     }
 }
-

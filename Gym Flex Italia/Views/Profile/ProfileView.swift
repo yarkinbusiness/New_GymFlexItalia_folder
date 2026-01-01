@@ -2,7 +2,8 @@
 //  ProfileView.swift
 //  Gym Flex Italia
 //
-//  Created by Yarkin Yavuz on 11/14/25.
+//  Profile view using canonical stores via AppContainer.
+//  Wallet balance from WalletStore, booking stats from MockBookingStore.
 //
 
 import SwiftUI
@@ -11,16 +12,14 @@ import SwiftUI
 struct ProfileView: View {
     
     @StateObject private var viewModel = ProfileViewModel()
-    @StateObject private var authService = AuthService.shared
     @EnvironmentObject var appearanceManager: AppearanceManager
     @EnvironmentObject var router: AppRouter
+    @Environment(\.appContainer) var appContainer
     
     // State for button action feedback
     @State private var showEditAvatarSheet = false
     @State private var showUpdateGoalsSheet = false
     @State private var showAddPaymentSheet = false
-    @State private var showActionAlert = false
-    @State private var actionAlertMessage = ""
     
     var body: some View {
         ZStack {
@@ -28,35 +27,58 @@ struct ProfileView: View {
             Color(.systemBackground)
                 .ignoresSafeArea()
             
-            ScrollView {
-                VStack(spacing: Spacing.lg) {
-                    // Profile Header
-                    profileHeaderSection
-                    
-                    // Weekly Progress
-                    weeklyProgressSection
-                    
-                    // Appearance Settings
-                    appearanceSection
-                    
-                    // Personal Information
-                    personalInfoSection
-                    
-                    // Payment Methods (if enabled)
-                    if FeatureFlags.shared.isWalletEnabled {
-                        paymentMethodsSection
+            if viewModel.isLoading && viewModel.profile == nil {
+                // Loading state
+                loadingView
+            } else if viewModel.errorMessage != nil && viewModel.profile == nil {
+                // Error state
+                errorView
+            } else {
+                // Content
+                ScrollView {
+                    VStack(spacing: Spacing.lg) {
+                        // Profile Header
+                        profileHeaderSection
+                        
+                        // Wallet Summary
+                        if FeatureFlags.shared.isWalletEnabled {
+                            walletSummarySection
+                        }
+                        
+                        // Payment Methods
+                        if FeatureFlags.shared.isWalletEnabled {
+                            paymentMethodsRow
+                        }
+                        
+                        // Booking Summary
+                        bookingSummarySection
+                        
+                        // Weekly Progress
+                        weeklyProgressSection
+                        
+                        // Appearance Settings
+                        appearanceSection
+                        
+                        // Personal Information
+                        personalInfoSection
+                        
+                        // Account & Security
+                        accountSecurityRow
+                        
+                        // Notifications & Preferences
+                        notificationsRow
                     }
-                    
-                    // Booking History
-                    bookingHistorySection
+                    .padding(.horizontal, Spacing.md)
+                    .padding(.top, Spacing.md)
+                    .padding(.bottom, 100) // Space for tab bar
                 }
-                .padding(.horizontal, Spacing.md)
-                .padding(.top, Spacing.md)
-                .padding(.bottom, 100) // Space for tab bar
+                .refreshable {
+                    await viewModel.refresh(using: appContainer)
+                }
             }
-            .refreshable {
-                await viewModel.refresh()
-            }
+        }
+        .task {
+            await viewModel.load(using: appContainer)
         }
         .sheet(isPresented: $showEditAvatarSheet) {
             SheetPlaceholderView(title: "Edit Avatar", message: "Avatar customization coming soon!")
@@ -67,6 +89,317 @@ struct ProfileView: View {
         .sheet(isPresented: $showAddPaymentSheet) {
             SheetPlaceholderView(title: "Add Payment", message: "Payment methods coming soon!")
         }
+    }
+    
+    // MARK: - Loading View
+    private var loadingView: some View {
+        VStack(spacing: Spacing.lg) {
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: AppColors.brand))
+                .scaleEffect(1.5)
+            
+            Text("Loading profile...")
+                .font(AppFonts.body)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    // MARK: - Error View
+    private var errorView: some View {
+        VStack(spacing: Spacing.lg) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 48))
+                .foregroundColor(AppColors.danger)
+            
+            Text("Failed to load profile")
+                .font(AppFonts.h3)
+                .foregroundColor(.primary)
+            
+            Text(viewModel.errorMessage ?? "An error occurred")
+                .font(AppFonts.body)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            
+            Button {
+                DemoTapLogger.log("Profile.Retry")
+                Task {
+                    await viewModel.retry(using: appContainer)
+                }
+            } label: {
+                Text("Retry")
+                    .font(AppFonts.label)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, Spacing.xl)
+                    .padding(.vertical, Spacing.md)
+                    .background(AppGradients.primary)
+                    .clipShape(Capsule())
+            }
+        }
+        .padding(Spacing.xl)
+    }
+    
+    // MARK: - Wallet Summary Section
+    private var walletSummarySection: some View {
+        Button {
+            DemoTapLogger.log("Profile.WalletSummary")
+            router.pushWallet()
+        } label: {
+            HStack(spacing: Spacing.md) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: CornerRadii.sm)
+                        .fill(AppColors.success.opacity(0.2))
+                        .frame(width: 40, height: 40)
+                    
+                    Image(systemName: "wallet.pass.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(AppColors.success)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Wallet Balance")
+                        .font(AppFonts.bodySmall)
+                        .foregroundColor(Color(.secondaryLabel))
+                    
+                    Text(viewModel.formattedWalletBalance)
+                        .font(AppFonts.h3)
+                        .foregroundColor(Color(.label))
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14))
+                    .foregroundColor(Color(.tertiaryLabel))
+            }
+            .padding(Spacing.lg)
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(CornerRadii.lg)
+            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
+        }
+        .buttonStyle(.plain)
+    }
+    
+    // MARK: - Payment Methods Row
+    private var paymentMethodsRow: some View {
+        Button {
+            DemoTapLogger.log("Profile.PaymentMethods")
+            router.pushPaymentMethods()
+        } label: {
+            HStack(spacing: Spacing.md) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: CornerRadii.sm)
+                        .fill(AppColors.accent.opacity(0.2))
+                        .frame(width: 40, height: 40)
+                    
+                    Image(systemName: "creditcard.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(AppColors.accent)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Payment Methods")
+                        .font(AppFonts.body)
+                        .foregroundColor(Color(.label))
+                    
+                    let cardCount = PaymentMethodsStore.shared.cards.count
+                    Text(cardCount == 0 ? "Add a payment method" : "\(cardCount) card\(cardCount == 1 ? "" : "s") saved")
+                        .font(AppFonts.caption)
+                        .foregroundColor(Color(.secondaryLabel))
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14))
+                    .foregroundColor(Color(.tertiaryLabel))
+            }
+            .padding(Spacing.lg)
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(CornerRadii.lg)
+            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
+        }
+        .buttonStyle(.plain)
+    }
+    
+    // MARK: - Account & Security Row
+    private var accountSecurityRow: some View {
+        Button {
+            DemoTapLogger.log("Profile.AccountSecurity")
+            router.pushAccountSecurity()
+        } label: {
+            HStack(spacing: Spacing.md) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: CornerRadii.sm)
+                        .fill(AppColors.brand.opacity(0.2))
+                        .frame(width: 40, height: 40)
+                    
+                    Image(systemName: "lock.shield.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(AppColors.brand)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Account & Security")
+                        .font(AppFonts.body)
+                        .foregroundColor(Color(.label))
+                    
+                    Text("Password, biometrics, devices")
+                        .font(AppFonts.caption)
+                        .foregroundColor(Color(.secondaryLabel))
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14))
+                    .foregroundColor(Color(.tertiaryLabel))
+            }
+            .padding(Spacing.lg)
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(CornerRadii.lg)
+            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
+        }
+        .buttonStyle(.plain)
+    }
+    
+    // MARK: - Notifications Row
+    private var notificationsRow: some View {
+        Button {
+            DemoTapLogger.log("Profile.Notifications")
+            router.pushNotificationsPreferences()
+        } label: {
+            HStack(spacing: Spacing.md) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: CornerRadii.sm)
+                        .fill(AppColors.warning.opacity(0.2))
+                        .frame(width: 40, height: 40)
+                    
+                    Image(systemName: "bell.badge.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(AppColors.warning)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Notifications & Preferences")
+                        .font(AppFonts.body)
+                        .foregroundColor(Color(.label))
+                    
+                    Text("Reminders, alerts, quiet hours")
+                        .font(AppFonts.caption)
+                        .foregroundColor(Color(.secondaryLabel))
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14))
+                    .foregroundColor(Color(.tertiaryLabel))
+            }
+            .padding(Spacing.lg)
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(CornerRadii.lg)
+            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
+        }
+        .buttonStyle(.plain)
+    }
+    
+    // MARK: - Booking Summary Section
+    private var bookingSummarySection: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            HStack {
+                HStack(spacing: Spacing.sm) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: CornerRadii.sm)
+                            .fill(AppColors.accent.opacity(0.2))
+                            .frame(width: 32, height: 32)
+                        
+                        Image(systemName: "calendar.badge.clock")
+                            .font(.system(size: 14))
+                            .foregroundColor(AppColors.accent)
+                    }
+                    
+                    Text("My Bookings")
+                        .font(AppFonts.h4)
+                        .foregroundColor(Color(.label))
+                }
+                
+                Spacer()
+                
+                Button {
+                    DemoTapLogger.log("Profile.ViewAllBookings")
+                    router.pushBookingHistory()
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("View All")
+                            .font(AppFonts.bodySmall)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12))
+                    }
+                    .foregroundColor(AppColors.brand)
+                }
+            }
+            
+            // Stats Row
+            HStack(spacing: Spacing.lg) {
+                // Upcoming
+                VStack(spacing: 4) {
+                    Text("\(viewModel.upcomingCount)")
+                        .font(AppFonts.h2)
+                        .foregroundColor(AppColors.brand)
+                    
+                    Text("Upcoming")
+                        .font(AppFonts.caption)
+                        .foregroundColor(Color(.secondaryLabel))
+                }
+                .frame(maxWidth: .infinity)
+                
+                Divider()
+                    .frame(height: 40)
+                
+                // Past
+                VStack(spacing: 4) {
+                    Text("\(viewModel.pastCount)")
+                        .font(AppFonts.h2)
+                        .foregroundColor(Color(.label))
+                    
+                    Text("Past")
+                        .font(AppFonts.caption)
+                        .foregroundColor(Color(.secondaryLabel))
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .padding(Spacing.md)
+            .background(Color(.tertiarySystemBackground))
+            .cornerRadius(CornerRadii.md)
+            
+            // Last Booking
+            if let summary = viewModel.lastBookingSummary {
+                HStack(spacing: Spacing.sm) {
+                    Image(systemName: "clock.arrow.2.circlepath")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(.secondaryLabel))
+                    
+                    Text("Last booking: \(summary)")
+                        .font(AppFonts.caption)
+                        .foregroundColor(Color(.secondaryLabel))
+                }
+            } else {
+                HStack(spacing: Spacing.sm) {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(.secondaryLabel))
+                    
+                    Text("No bookings yet")
+                        .font(AppFonts.caption)
+                        .foregroundColor(Color(.secondaryLabel))
+                }
+            }
+        }
+        .padding(Spacing.lg)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(CornerRadii.lg)
+        .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
     }
     
     // MARK: - Appearance Section
@@ -328,159 +661,6 @@ struct ProfileView: View {
         .cornerRadius(CornerRadii.lg)
         .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
     }
-    
-    // MARK: - Payment Methods
-    private var paymentMethodsSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.md) {
-            HStack(spacing: Spacing.sm) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: CornerRadii.sm)
-                        .fill(AppColors.accent.opacity(0.2))
-                        .frame(width: 32, height: 32)
-                    
-                    Image(systemName: "creditcard.fill")
-                        .font(.system(size: 14))
-                        .foregroundColor(AppColors.accent)
-                }
-                
-                Text("Payment Methods")
-                    .font(AppFonts.h4)
-                    .foregroundColor(Color(.label))
-            }
-            
-            // Payment Card
-            HStack(spacing: Spacing.md) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: CornerRadii.sm)
-                        .fill(AppColors.accent.opacity(0.2))
-                        .frame(width: 40, height: 40)
-                    
-                    Image(systemName: "creditcard.fill")
-                        .font(.system(size: 18))
-                        .foregroundColor(AppColors.accent)
-                }
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Visa •••• 4242")
-                        .font(AppFonts.h5)
-                        .foregroundColor(Color(.label))
-                    
-                    Text("Expires 12/25")
-                        .font(AppFonts.bodySmall)
-                        .foregroundColor(Color(.secondaryLabel))
-                }
-                
-                Spacer()
-                
-                Text("Default")
-                    .font(AppFonts.caption)
-                    .foregroundColor(AppColors.success)
-                    .padding(.horizontal, Spacing.sm)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule()
-                            .fill(AppColors.success.opacity(0.2))
-                    )
-            }
-            .padding(Spacing.md)
-            .background(Color(.tertiarySystemBackground))
-            .cornerRadius(CornerRadii.md)
-            
-            Button {
-                DemoTapLogger.log("Profile.AddPaymentMethod")
-                showAddPaymentSheet = true
-            } label: {
-                Text("+ Add Payment Method")
-                    .font(AppFonts.bodySmall)
-                    .foregroundColor(AppColors.brand)
-                    .frame(maxWidth: .infinity)
-            }
-        }
-        .padding(Spacing.lg)
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(CornerRadii.lg)
-        .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
-    }
-    
-    // MARK: - Booking History
-    private var bookingHistorySection: some View {
-        VStack(alignment: .leading, spacing: Spacing.md) {
-            HStack {
-                HStack(spacing: Spacing.sm) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: CornerRadii.sm)
-                            .fill(AppColors.accent.opacity(0.2))
-                            .frame(width: 32, height: 32)
-                        
-                        Image(systemName: "calendar.badge.clock")
-                            .font(.system(size: 14))
-                            .foregroundColor(AppColors.accent)
-                    }
-                    
-                    Text("My Bookings")
-                        .font(AppFonts.h4)
-                        .foregroundColor(Color(.label))
-                }
-                
-                Spacer()
-                
-                Button {
-                    DemoTapLogger.log("Profile.MyBookings")
-                    router.pushBookingHistory()
-                } label: {
-                    HStack(spacing: 4) {
-                        Text("View All")
-                            .font(AppFonts.bodySmall)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 12))
-                    }
-                    .foregroundColor(AppColors.brand)
-                }
-            }
-            
-            // Quick access button
-            Button {
-                DemoTapLogger.log("Profile.MyBookings")
-                router.pushBookingHistory()
-            } label: {
-                HStack(spacing: Spacing.md) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: CornerRadii.sm)
-                            .fill(AppColors.brand.opacity(0.1))
-                            .frame(width: 40, height: 40)
-                        
-                        Image(systemName: "list.bullet.rectangle")
-                            .font(.system(size: 18))
-                            .foregroundColor(AppColors.brand)
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("View Booking History")
-                            .font(AppFonts.h5)
-                            .foregroundColor(Color(.label))
-                        
-                        Text("Upcoming and past gym sessions")
-                            .font(AppFonts.bodySmall)
-                            .foregroundColor(Color(.secondaryLabel))
-                    }
-                    
-                    Spacer()
-                    
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 14))
-                        .foregroundColor(Color(.tertiaryLabel))
-                }
-                .padding(Spacing.md)
-                .background(Color(.tertiarySystemBackground))
-                .cornerRadius(CornerRadii.md)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(Spacing.lg)
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(CornerRadii.lg)
-        .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
-    }
 }
 
 // MARK: - Info Row
@@ -516,67 +696,6 @@ struct InfoRow: View {
         .padding(Spacing.md)
         .background(Color(.tertiarySystemBackground))
         .cornerRadius(CornerRadii.md)
-    }
-}
-
-// MARK: - Booking History Row
-struct BookingHistoryRow: View {
-    var gymName: String?
-    var date: String?
-    var duration: String?
-    var price: String?
-    var status: String?
-    
-    var booking: Booking?
-    
-    init(booking: Booking) {
-        self.booking = booking
-        self.gymName = booking.gymName
-        self.date = booking.startTime.formatted(date: .numeric, time: .omitted)
-        self.duration = booking.formattedDuration
-        self.price = String(format: "€%.2f", booking.totalPrice)
-        self.status = booking.status.rawValue
-    }
-    
-    init(gymName: String, date: String, duration: String, price: String, status: String) {
-        self.gymName = gymName
-        self.date = date
-        self.duration = duration
-        self.price = price
-        self.status = status
-    }
-    
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(gymName ?? "Gym")
-                    .font(AppFonts.h5)
-                    .foregroundColor(Color(.label))
-                
-                if let date = date, let duration = duration {
-                    Text("\(date) • \(duration)")
-                        .font(AppFonts.bodySmall)
-                        .foregroundColor(Color(.secondaryLabel))
-                }
-            }
-            
-            Spacer()
-            
-            VStack(alignment: .trailing, spacing: 4) {
-                if let price = price {
-                    Text(price)
-                        .font(AppFonts.h5)
-                        .foregroundColor(AppColors.brand)
-                }
-                
-                if let status = status {
-                    Text(status)
-                        .font(AppFonts.caption)
-                        .foregroundColor(AppColors.danger)
-                    .textCase(.lowercase)
-                }
-            }
-        }
     }
 }
 

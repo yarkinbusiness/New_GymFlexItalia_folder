@@ -2,7 +2,8 @@
 //  GroupsViewModel.swift
 //  Gym Flex Italia
 //
-//  Created by Yarkin Yavuz on 11/14/25.
+//  ViewModel for groups discovery and management.
+//  Uses DI via AppContainer - no legacy GroupsService.shared usage.
 //
 
 import Foundation
@@ -22,16 +23,19 @@ final class GroupsViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var showCreateGroup = false
     
-    private let groupsService = GroupsService.shared
+    /// Current user ID (from mock data)
+    private let currentUserId = MockDataStore.mockUserId
     
     // MARK: - Load Groups
-    func loadAllGroups() async {
+    
+    func load(using service: GroupsChatServiceProtocol) async {
         isLoading = true
         errorMessage = nil
         
         do {
-            allGroups = try await groupsService.fetchGroups(category: selectedCategory)
-            filteredGroups = allGroups
+            allGroups = try await service.fetchGroups()
+            myGroups = try await service.fetchMyGroups(userId: currentUserId)
+            filteredGroups = filterGroups(allGroups)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -39,12 +43,13 @@ final class GroupsViewModel: ObservableObject {
         isLoading = false
     }
     
-    func loadMyGroups() async {
+    func loadAllGroups(using service: GroupsChatServiceProtocol) async {
         isLoading = true
         errorMessage = nil
         
         do {
-            myGroups = try await groupsService.fetchMyGroups()
+            allGroups = try await service.fetchGroups()
+            filteredGroups = filterGroups(allGroups)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -52,47 +57,65 @@ final class GroupsViewModel: ObservableObject {
         isLoading = false
     }
     
-    // MARK: - Search
-    func search() async {
-        guard !searchQuery.isEmpty else {
-            filteredGroups = allGroups
-            return
-        }
-        
+    func loadMyGroups(using service: GroupsChatServiceProtocol) async {
         isLoading = true
         errorMessage = nil
         
         do {
-            filteredGroups = try await groupsService.searchGroups(query: searchQuery)
+            myGroups = try await service.fetchMyGroups(userId: currentUserId)
         } catch {
             errorMessage = error.localizedDescription
         }
         
         isLoading = false
+    }
+    
+    // MARK: - Search & Filter
+    
+    private func filterGroups(_ groups: [FitnessGroup]) -> [FitnessGroup] {
+        var result = groups
+        
+        // Filter by category
+        if let category = selectedCategory {
+            result = result.filter { $0.category == category }
+        }
+        
+        // Filter by search query
+        if !searchQuery.isEmpty {
+            let query = searchQuery.lowercased()
+            result = result.filter {
+                $0.name.lowercased().contains(query) ||
+                ($0.description?.lowercased().contains(query) ?? false)
+            }
+        }
+        
+        return result
+    }
+    
+    func search() {
+        filteredGroups = filterGroups(allGroups)
     }
     
     func clearSearch() {
         searchQuery = ""
-        filteredGroups = allGroups
+        filteredGroups = filterGroups(allGroups)
     }
     
-    // MARK: - Filter by Category
     func filterByCategory(_ category: GroupCategory?) {
         selectedCategory = category
-        Task {
-            await loadAllGroups()
-        }
+        filteredGroups = filterGroups(allGroups)
     }
     
     // MARK: - Join/Leave Group
-    func joinGroup(_ group: FitnessGroup) async {
+    
+    func joinGroup(_ group: FitnessGroup, using service: GroupsChatServiceProtocol) async {
         isLoading = true
         errorMessage = nil
         
         do {
-            _ = try await groupsService.joinGroup(id: group.id)
-            await loadMyGroups()
-            await loadAllGroups()
+            try await service.joinGroup(id: group.id, userId: currentUserId)
+            await loadMyGroups(using: service)
+            await loadAllGroups(using: service)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -100,14 +123,14 @@ final class GroupsViewModel: ObservableObject {
         isLoading = false
     }
     
-    func leaveGroup(_ group: FitnessGroup) async {
+    func leaveGroup(_ group: FitnessGroup, using service: GroupsChatServiceProtocol) async {
         isLoading = true
         errorMessage = nil
         
         do {
-            try await groupsService.leaveGroup(id: group.id)
-            await loadMyGroups()
-            await loadAllGroups()
+            try await service.leaveGroup(id: group.id, userId: currentUserId)
+            await loadMyGroups(using: service)
+            await loadAllGroups(using: service)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -116,12 +139,20 @@ final class GroupsViewModel: ObservableObject {
     }
     
     // MARK: - Create Group
-    func createGroup(name: String, description: String?, category: GroupCategory, isPublic: Bool, maxMembers: Int?) async -> Bool {
+    
+    func createGroup(
+        name: String,
+        description: String?,
+        category: GroupCategory,
+        isPublic: Bool,
+        maxMembers: Int?,
+        using service: GroupsChatServiceProtocol
+    ) async -> FitnessGroup? {
         isLoading = true
         errorMessage = nil
         
         do {
-            _ = try await groupsService.createGroup(
+            let group = try await service.createGroup(
                 name: name,
                 description: description,
                 category: category,
@@ -129,20 +160,21 @@ final class GroupsViewModel: ObservableObject {
                 maxMembers: maxMembers
             )
             
-            await loadMyGroups()
+            await loadMyGroups(using: service)
+            await loadAllGroups(using: service)
             showCreateGroup = false
             isLoading = false
-            return true
+            return group
         } catch {
             errorMessage = error.localizedDescription
             isLoading = false
-            return false
+            return nil
         }
     }
     
     // MARK: - Helper Methods
+    
     func isUserMember(of group: FitnessGroup) -> Bool {
         return myGroups.contains { $0.id == group.id }
     }
 }
-

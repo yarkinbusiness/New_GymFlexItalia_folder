@@ -2,7 +2,7 @@
 //  CreateGroupView.swift
 //  Gym Flex Italia
 //
-//  Created by Yarkin Yavuz on 11/14/25.
+//  Create group modal using DI via AppContainer.
 //
 
 import SwiftUI
@@ -11,12 +11,17 @@ import SwiftUI
 struct CreateGroupView: View {
     
     @Binding var isPresented: Bool
-    @StateObject private var viewModel = GroupsViewModel()
+    var onGroupCreated: ((FitnessGroup?) -> Void)? = nil
+    
+    @EnvironmentObject var viewModel: GroupsViewModel
+    @Environment(\.appContainer) var appContainer
     
     @State private var groupName = ""
     @State private var description = ""
     @State private var isPublic = false
     @State private var selectedCategory: GroupCategory = .general
+    @State private var isCreating = false
+    @State private var errorMessage: String?
     
     var body: some View {
         ZStack {
@@ -47,6 +52,20 @@ struct CreateGroupView: View {
                 
                 ScrollView {
                     VStack(spacing: Spacing.lg) {
+                        // Error Banner
+                        if let error = errorMessage {
+                            HStack {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                Text(error)
+                            }
+                            .font(AppFonts.bodySmall)
+                            .foregroundColor(.white)
+                            .padding(Spacing.md)
+                            .frame(maxWidth: .infinity)
+                            .background(AppColors.danger)
+                            .clipShape(RoundedRectangle(cornerRadius: CornerRadii.sm))
+                        }
+                        
                         // Group Name
                         VStack(alignment: .leading, spacing: Spacing.sm) {
                             Text("Group Name")
@@ -98,9 +117,15 @@ struct CreateGroupView: View {
                                             .font(.system(size: 18))
                                             .foregroundColor(isPublic ? AppColors.textHigh : AppColors.textDim)
                                         
-                                        Text("Public")
-                                            .font(AppFonts.body)
-                                            .foregroundColor(isPublic ? AppColors.textHigh : AppColors.textDim)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Public")
+                                                .font(AppFonts.body)
+                                                .foregroundColor(isPublic ? AppColors.textHigh : AppColors.textDim)
+                                            
+                                            Text("Anyone can find and join")
+                                                .font(AppFonts.caption)
+                                                .foregroundColor(AppColors.textDim)
+                                        }
                                         
                                         Spacer()
                                         
@@ -128,9 +153,15 @@ struct CreateGroupView: View {
                                             .font(.system(size: 18))
                                             .foregroundColor(!isPublic ? AppColors.textHigh : AppColors.textDim)
                                         
-                                        Text("Private")
-                                            .font(AppFonts.body)
-                                            .foregroundColor(!isPublic ? AppColors.textHigh : AppColors.textDim)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Private")
+                                                .font(AppFonts.body)
+                                                .foregroundColor(!isPublic ? AppColors.textHigh : AppColors.textDim)
+                                            
+                                            Text("Only invited friends can join")
+                                                .font(AppFonts.caption)
+                                                .foregroundColor(AppColors.textDim)
+                                        }
                                         
                                         Spacer()
                                         
@@ -148,12 +179,38 @@ struct CreateGroupView: View {
                                     .glassBackground(cornerRadius: CornerRadii.md)
                                 }
                                 .buttonStyle(PlainButtonStyle())
-                                
-                                if !isPublic {
-                                    Text("Only invited friends can join")
-                                        .font(AppFonts.bodySmall)
-                                        .foregroundColor(AppColors.textDim)
-                                        .padding(.leading, Spacing.xl)
+                            }
+                        }
+                        
+                        // Category Picker
+                        VStack(alignment: .leading, spacing: Spacing.sm) {
+                            Text("Category")
+                                .font(AppFonts.h5)
+                                .foregroundColor(AppColors.textHigh)
+                            
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: Spacing.sm) {
+                                    ForEach(GroupCategory.allCases, id: \.self) { category in
+                                        Button {
+                                            selectedCategory = category
+                                        } label: {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: category.icon)
+                                                Text(category.displayName)
+                                            }
+                                            .font(AppFonts.caption)
+                                            .foregroundColor(selectedCategory == category ? .white : AppColors.textDim)
+                                            .padding(.horizontal, Spacing.md)
+                                            .padding(.vertical, Spacing.sm)
+                                            .background(
+                                                selectedCategory == category
+                                                    ? AppColors.brand
+                                                    : AppColors.secondary
+                                            )
+                                            .clipShape(Capsule())
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                    }
                                 }
                             }
                         }
@@ -172,29 +229,24 @@ struct CreateGroupView: View {
                             }
                             
                             Button {
-                                Task {
-                                    let success = await viewModel.createGroup(
-                                        name: groupName,
-                                        description: description.isEmpty ? nil : description,
-                                        category: selectedCategory,
-                                        isPublic: isPublic,
-                                        maxMembers: nil
-                                    )
-                                    
-                                    if success {
-                                        isPresented = false
-                                    }
-                                }
+                                createGroup()
                             } label: {
-                                Text("Create Group")
-                                    .font(AppFonts.label)
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, Spacing.md)
-                                    .background(AppGradients.primary)
-                                    .clipShape(RoundedRectangle(cornerRadius: CornerRadii.md))
+                                HStack {
+                                    if isCreating {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .scaleEffect(0.8)
+                                    }
+                                    Text(isCreating ? "Creating..." : "Create Group")
+                                }
+                                .font(AppFonts.label)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, Spacing.md)
+                                .background(AppGradients.primary)
+                                .clipShape(RoundedRectangle(cornerRadius: CornerRadii.md))
                             }
-                            .disabled(groupName.isEmpty || viewModel.isLoading)
+                            .disabled(groupName.isEmpty || isCreating)
                         }
                     }
                     .padding(Spacing.lg)
@@ -204,9 +256,38 @@ struct CreateGroupView: View {
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }
+    
+    private func createGroup() {
+        guard !groupName.isEmpty else { return }
+        
+        isCreating = true
+        errorMessage = nil
+        
+        Task {
+            let group = await viewModel.createGroup(
+                name: groupName,
+                description: description.isEmpty ? nil : description,
+                category: selectedCategory,
+                isPublic: isPublic,
+                maxMembers: nil,
+                using: appContainer.groupsChatService
+            )
+            
+            isCreating = false
+            
+            if let group = group {
+                DemoTapLogger.log("Groups.Created", context: "id: \(group.id), isPublic: \(isPublic)")
+                isPresented = false
+                onGroupCreated?(group)
+            } else {
+                errorMessage = viewModel.errorMessage ?? "Failed to create group"
+            }
+        }
+    }
 }
 
 #Preview {
     CreateGroupView(isPresented: .constant(true))
+        .environmentObject(GroupsViewModel())
+        .environment(\.appContainer, .demo())
 }
-

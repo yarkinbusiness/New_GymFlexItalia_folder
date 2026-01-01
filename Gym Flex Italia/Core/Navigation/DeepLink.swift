@@ -32,5 +32,8 @@ enum DeepLink: Hashable {
     
     /// Navigate to a specific gym detail
     case gymDetail(String)
+    
+    /// Navigate to a group via invite link (private group invitation)
+    case groupInvite(String) // groupId
 }
 

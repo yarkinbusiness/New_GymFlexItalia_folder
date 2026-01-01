@@ -26,6 +26,12 @@ final class MockBookingService: BookingServiceProtocol {
     func createBooking(gymId: String, date: Date, duration: Int = 60) async throws -> BookingConfirmation {
         print("🎯 BOOKING FLOW: createBooking called gymId=\(gymId) date=\(date) duration=\(duration)")
         
+        // SINGLE ACTIVE SESSION RULE: Check if user already has an active session
+        if MockBookingStore.shared.hasActiveSession() {
+            print("❌ BOOKING FLOW: Blocked - user already has an active session")
+            throw BookingServiceError.activeSessionExists
+        }
+        
         // Simulate network delay (400-600ms)
         try await Task.sleep(nanoseconds: UInt64.random(in: 400_000_000...600_000_000))
         

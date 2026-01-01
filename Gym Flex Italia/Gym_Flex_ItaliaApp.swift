@@ -26,6 +26,9 @@ struct Gym_Flex_ItaliaApp: App {
     // Deep link queue for buffering links during cold start
     @StateObject private var deepLinkQueue = DeepLinkQueue()
     
+    // Notification permission manager
+    @StateObject private var notificationPermissionManager = NotificationPermissionManager()
+    
     // Notification action handler (kept alive for delegate callbacks)
     private let notificationHandler = NotificationActionHandler()
     
@@ -48,6 +51,7 @@ struct Gym_Flex_ItaliaApp: App {
                 .environmentObject(router)
                 .environmentObject(settingsStore)
                 .environmentObject(deepLinkQueue)
+                .environmentObject(notificationPermissionManager)
                 .preferredColorScheme(settingsStore.preferredColorScheme)
                 .onAppear {
                     // Request location permission
@@ -56,6 +60,17 @@ struct Gym_Flex_ItaliaApp: App {
                     syncAppearanceWithSettings()
                     // Wire up notification action handler
                     setupNotificationHandler()
+                }
+                .task {
+                    // Refresh notification permission status on launch
+                    await notificationPermissionManager.refreshStatus()
+                }
+                .onOpenURL { url in
+                    // Handle invite link URLs (gymflex://invite?groupId=...)
+                    if let deepLink = InviteLinkParser.parse(url: url) {
+                        print("🔗 App received URL: \(url.absoluteString)")
+                        deepLinkQueue.enqueue(deepLink)
+                    }
                 }
         }
     }

@@ -2,19 +2,38 @@
 //  CheckInHomeView.swift
 //  Gym Flex Italia
 //
-//  Main check-in tab view showing next upcoming booking with QR code
+//  Main check-in tab view showing the current user session with QR code.
+//
+//  IMPORTANT: Uses MockBookingStore.currentUserSession() for session detection.
+//  This ensures Home and Check-in tabs show the SAME booking.
 //
 
 import SwiftUI
 import Combine
 
-/// Check-in tab home view displaying upcoming bookings with QR codes
+/// Check-in tab home view displaying current user session with QR code
 struct CheckInHomeView: View {
     
     @Environment(\.appContainer) private var appContainer
     @EnvironmentObject var router: AppRouter
     
-    @StateObject private var viewModel = BookingHistoryViewModel()
+    /// The current user session (from shared store logic)
+    @State private var currentSession: Booking?
+    
+    /// Additional upcoming user bookings (excluding current session)
+    @State private var upcomingUserBookings: [Booking] = []
+    
+    /// Loading state
+    @State private var isLoading = false
+    
+    /// Extension in progress (prevent double taps)
+    @State private var isExtending = false
+    
+    /// Error message
+    @State private var errorMessage: String?
+    
+    /// Success message for extension
+    @State private var successMessage: String?
     
     /// Timer for countdown updates
     @State private var now = Date()
@@ -25,8 +44,8 @@ struct CheckInHomeView: View {
             Color(.systemBackground)
                 .ignoresSafeArea()
             
-            if viewModel.isLoading {
-                LoadingOverlayView(message: "Loading bookings...")
+            if isLoading {
+                LoadingOverlayView(message: "Loading session...")
             } else {
                 ScrollView {
                     VStack(spacing: Spacing.xl) {
@@ -36,23 +55,32 @@ struct CheckInHomeView: View {
                         #endif
                         
                         // Error Banner
-                        if let error = viewModel.errorMessage {
+                        if let error = errorMessage {
                             InlineErrorBanner(
                                 message: error,
                                 type: .error,
-                                onDismiss: { viewModel.clearError() }
+                                onDismiss: { errorMessage = nil }
                             )
                         }
                         
-                        // Next Check-in Section
-                        if let nextBooking = viewModel.upcomingBookings.first {
-                            nextCheckInSection(nextBooking)
+                        // Success Banner
+                        if let success = successMessage {
+                            InlineErrorBanner(
+                                message: success,
+                                type: .success,
+                                onDismiss: { successMessage = nil }
+                            )
+                        }
+                        
+                        // Current Session Section (using shared currentUserSession)
+                        if let session = currentSession {
+                            currentSessionSection(session)
                         } else {
                             emptyStateView
                         }
                         
-                        // Upcoming Bookings List
-                        if viewModel.upcomingBookings.count > 1 {
+                        // Additional Upcoming User Bookings
+                        if !upcomingUserBookings.isEmpty {
                             upcomingBookingsSection
                         }
                     }
@@ -60,37 +88,54 @@ struct CheckInHomeView: View {
                     .padding(.bottom, 100) // Space for tab bar
                 }
                 .refreshable {
-                    await loadBookings()
+                    await loadSession()
                 }
             }
         }
         .navigationTitle("Check-in")
         .navigationBarTitleDisplayMode(.large)
         .task {
-            await loadBookings()
+            await loadSession()
         }
         .onAppear {
-            print("👀 CheckInHomeView.onAppear: Reloading bookings...")
+            print("👀 CheckInHomeView.onAppear: Reloading session...")
             Task {
-                await loadBookings()
+                await loadSession()
             }
         }
         .onReceive(timer) { _ in
             now = Date()
+            
+            // Check if session has ended
+            if let session = currentSession, session.endTime <= now {
+                print("⏰ CheckInHomeView: Session ended, reloading...")
+                Task {
+                    await loadSession()
+                }
+            }
         }
     }
     
-    /// Load bookings from service and sync with store
-    private func loadBookings() async {
+    /// Load current session using SHARED currentUserSession() logic
+    private func loadSession() async {
         // Ensure store is seeded
         MockBookingStore.shared.seedIfNeeded()
         
-        print("🔄 CheckInHomeView: Loading bookings...")
-        print("📊 CheckInHomeView: Store state before load:\n\(MockBookingStore.shared.debugDump())")
+        print("🔄 CheckInHomeView: Loading session using currentUserSession()...")
+        print("📊 CheckInHomeView: Store state:\n\(MockBookingStore.shared.debugDump())")
         
-        await viewModel.load(using: appContainer.bookingHistoryService)
+        // IMPORTANT: Use the SAME shared selection logic as HomeViewModel
+        currentSession = MockBookingStore.shared.currentUserSession()
         
-        print("✅ CheckInHomeView: Loaded \(viewModel.upcomingBookings.count) upcoming bookings")
+        // Get additional upcoming user bookings (excluding the current session)
+        let allUpcoming = MockBookingStore.shared.upcomingUserBookings()
+        if let current = currentSession {
+            upcomingUserBookings = allUpcoming.filter { $0.id != current.id }
+        } else {
+            upcomingUserBookings = allUpcoming
+        }
+        
+        print("✅ CheckInHomeView: currentSession=\(currentSession?.id ?? "nil"), upcomingUserBookings=\(upcomingUserBookings.count)")
     }
     
     // MARK: - Debug Banner
@@ -98,20 +143,24 @@ struct CheckInHomeView: View {
     #if DEBUG
     private var debugBanner: some View {
         VStack(spacing: Spacing.xs) {
-            Text("DEBUG: Upcoming: \(viewModel.upcomingBookings.count) | Store: \(MockBookingStore.shared.upcomingBookings().count)")
+            Text("DEBUG: Session=\(currentSession?.id ?? "nil")")
+                .font(AppFonts.caption)
+                .foregroundColor(.orange)
+            
+            Text("UserBookings: \(MockBookingStore.shared.userBookings().count) | All: \(MockBookingStore.shared.bookings.count)")
                 .font(AppFonts.caption)
                 .foregroundColor(.orange)
         }
     }
     #endif
     
-    // MARK: - Next Check-in Section
+    // MARK: - Current Session Section
     
-    private func nextCheckInSection(_ booking: Booking) -> some View {
+    private func currentSessionSection(_ booking: Booking) -> some View {
         VStack(spacing: Spacing.lg) {
             // Section Header
             HStack {
-                Text("Next Check-in")
+                Text("Current Session")
                     .font(AppFonts.h4)
                     .foregroundColor(.primary)
                 
@@ -123,14 +172,21 @@ struct CheckInHomeView: View {
             // Countdown Timer
             countdownSection(booking)
             
-            // QR Card
+            // Extend Time Buttons (only when session is active)
+            if booking.endTime > now {
+                extendTimeSection(booking)
+            }
+            
+            // QR Card (QR code is ONLY shown here on Check-in tab)
             qrCodeCard(booking)
             
             // Booking Details Card
             bookingDetailsCard(booking)
             
-            // Check In Button
-            checkInButton(booking)
+            // Check In Button (for manual check-in)
+            if booking.status == .confirmed {
+                checkInButton(booking)
+            }
         }
     }
     
@@ -177,6 +233,103 @@ struct CheckInHomeView: View {
         } else {
             return String(format: "%02d:%02d", minutes, secs)
         }
+    }
+    
+    // MARK: - Extend Time Section
+    
+    private func extendTimeSection(_ booking: Booking) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text("Extend Time")
+                .font(AppFonts.h5)
+                .foregroundColor(.primary)
+            
+            HStack(spacing: Spacing.sm) {
+                ExtendTimeButton(
+                    minutes: 30,
+                    price: "€1",
+                    isDisabled: isExtending
+                ) {
+                    await handleExtend(booking: booking, minutes: 30, costCents: 100)
+                }
+                
+                ExtendTimeButton(
+                    minutes: 60,
+                    price: "€2",
+                    isDisabled: isExtending
+                ) {
+                    await handleExtend(booking: booking, minutes: 60, costCents: 200)
+                }
+                
+                ExtendTimeButton(
+                    minutes: 90,
+                    price: "€3",
+                    isDisabled: isExtending
+                ) {
+                    await handleExtend(booking: booking, minutes: 90, costCents: 300)
+                }
+            }
+            
+            if isExtending {
+                HStack {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle())
+                    Text("Extending session...")
+                        .font(AppFonts.caption)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, Spacing.xs)
+            }
+        }
+        .padding(Spacing.md)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: CornerRadii.lg))
+    }
+    
+    /// Handle extend time button tap
+    private func handleExtend(booking: Booking, minutes: Int, costCents: Int) async {
+        guard !isExtending else { return }
+        
+        isExtending = true
+        errorMessage = nil
+        successMessage = nil
+        
+        DemoTapLogger.log("CheckIn.Extend.\(minutes)min")
+        
+        do {
+            // Check wallet balance
+            let walletStore = WalletStore.shared
+            guard walletStore.balanceCents >= costCents else {
+                throw BookingExtensionError.insufficientFunds
+            }
+            
+            // Debit wallet (use extension as booking ref suffix)
+            try walletStore.applyDebitForBooking(
+                amountCents: costCents,
+                bookingRef: "\(booking.id)-ext",
+                gymName: booking.gymName ?? "Gym",
+                gymId: booking.gymId
+            )
+            
+            // Extend booking in store
+            let updatedBooking = try MockBookingStore.shared.extend(
+                bookingId: booking.id,
+                addMinutes: minutes
+            )
+            
+            // Update current session
+            currentSession = updatedBooking
+            
+            successMessage = "+\(minutes) minutes added! New end time: \(updatedBooking.endTime.formatted(date: .omitted, time: .shortened))"
+            
+            print("✅ CheckInHomeView: Extended booking by \(minutes)min, new duration=\(updatedBooking.duration)")
+            
+        } catch {
+            errorMessage = error.localizedDescription
+            print("❌ CheckInHomeView: Extension failed - \(error.localizedDescription)")
+        }
+        
+        isExtending = false
     }
     
     // MARK: - QR Code Card
@@ -348,18 +501,21 @@ struct CheckInHomeView: View {
     // MARK: - Status Badge
     
     private func statusBadge(_ booking: Booking) -> some View {
-        HStack(spacing: 4) {
+        let remaining = booking.endTime.timeIntervalSince(now)
+        let isEnded = remaining <= 0
+        
+        return HStack(spacing: 4) {
             Circle()
-                .fill(AppColors.success)
+                .fill(isEnded ? Color.gray : AppColors.success)
                 .frame(width: 8, height: 8)
             
-            Text(timeUntilBooking(booking))
+            Text(isEnded ? "Ended" : (booking.status == .checkedIn ? "Active" : timeUntilBooking(booking)))
                 .font(AppFonts.caption)
-                .foregroundColor(AppColors.success)
+                .foregroundColor(isEnded ? .gray : AppColors.success)
         }
         .padding(.horizontal, Spacing.sm)
         .padding(.vertical, Spacing.xs)
-        .background(AppColors.success.opacity(0.15))
+        .background((isEnded ? Color.gray : AppColors.success).opacity(0.15))
         .clipShape(Capsule())
     }
     
@@ -371,7 +527,7 @@ struct CheckInHomeView: View {
                 .font(AppFonts.h5)
                 .foregroundColor(.primary)
             
-            ForEach(viewModel.upcomingBookings.dropFirst()) { booking in
+            ForEach(upcomingUserBookings) { booking in
                 upcomingBookingRow(booking)
             }
         }
@@ -425,7 +581,7 @@ struct CheckInHomeView: View {
                 .foregroundColor(.secondary)
             
             VStack(spacing: Spacing.sm) {
-                Text("No Upcoming Bookings")
+                Text("No Active Session")
                     .font(AppFonts.h3)
                     .foregroundColor(.primary)
                 
@@ -437,7 +593,7 @@ struct CheckInHomeView: View {
             
             Button {
                 DemoTapLogger.log("CheckInHome.FindGyms")
-                router.handle(deepLink: .bookSession)
+                router.switchToTab(.discover)
             } label: {
                 HStack {
                     Image(systemName: "magnifyingglass")
@@ -461,6 +617,47 @@ struct CheckInHomeView: View {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: booking.startTime, relativeTo: Date())
+    }
+}
+
+// MARK: - Extend Time Button
+
+struct ExtendTimeButton: View {
+    let minutes: Int
+    let price: String
+    let isDisabled: Bool
+    let action: () async -> Void
+    
+    var body: some View {
+        Button {
+            Task {
+                await action()
+            }
+        } label: {
+            VStack(spacing: 4) {
+                Text("+\(minutes)")
+                    .font(AppFonts.h5)
+                    .foregroundColor(isDisabled ? .secondary : AppColors.brand)
+                
+                Text("min")
+                    .font(AppFonts.caption)
+                    .foregroundColor(.secondary)
+                
+                Text(price)
+                    .font(AppFonts.bodySmall)
+                    .foregroundColor(isDisabled ? .secondary : AppColors.success)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Spacing.md)
+            .background(isDisabled ? Color.gray.opacity(0.1) : AppColors.brand.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: CornerRadii.md))
+            .overlay(
+                RoundedRectangle(cornerRadius: CornerRadii.md)
+                    .stroke(isDisabled ? Color.gray.opacity(0.3) : AppColors.brand.opacity(0.3), lineWidth: 1)
+            )
+        }
+        .disabled(isDisabled)
+        .buttonStyle(PlainButtonStyle())
     }
 }
 

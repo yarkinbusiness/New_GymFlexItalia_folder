@@ -16,6 +16,7 @@ struct DeepLinkSimulatorView: View {
     
     @State private var customTransactionId = "txn_001"
     @State private var customGymId = "gym_1"
+    @State private var customGroupId = "group_005" // Private group (CrossFit Roma Elite)
     @State private var showEnqueuedMessage = false
     
     var body: some View {
@@ -146,6 +147,19 @@ struct DeepLinkSimulatorView: View {
                         subtitle: "Navigate to gym: \(customGymId)"
                     )
                 }
+                
+                Button {
+                    DemoTapLogger.log("Debug.DeepLink.GroupInvite", context: "id: \(customGroupId)")
+                    deepLinkQueue.enqueue(.groupInvite(customGroupId))
+                    showEnqueuedFeedback()
+                } label: {
+                    DeepLinkRow(
+                        icon: "person.3.fill",
+                        iconColor: .mint,
+                        title: "Group Invite",
+                        subtitle: "Invite to group: \(customGroupId)"
+                    )
+                }
             } header: {
                 Text("Simulate Deep Links")
             } footer: {
@@ -200,10 +214,14 @@ struct DeepLinkSimulatorView: View {
                 TextField("Gym ID", text: $customGymId)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                
+                TextField("Group ID", text: $customGroupId)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
             } header: {
                 Text("Configuration")
             } footer: {
-                Text("Set custom IDs for deep links.\n• Transaction: 'txn_001' through 'txn_015'\n• Gym: 'gym_1' through 'gym_6'")
+                Text("Set custom IDs for deep links.\n• Transaction: 'txn_001' through 'txn_015'\n• Gym: 'gym_1' through 'gym_6'\n• Group: 'group_001' through 'group_006'\n  (group_004, group_005 are private)")
             }
         }
         .navigationTitle("Deep Link Simulator")

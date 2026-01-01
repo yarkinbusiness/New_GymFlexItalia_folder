@@ -32,6 +32,9 @@ final class AppContainer {
     /// Check-in services (validate codes, mark checked-in)
     let checkInService: CheckInServiceProtocol
     
+    /// Groups and chat services (fetch groups, send messages)
+    let groupsChatService: GroupsChatServiceProtocol
+    
     // MARK: - Initialization
     
     init(
@@ -41,7 +44,8 @@ final class AppContainer {
         notificationService: NotificationServiceProtocol,
         walletService: WalletServiceProtocol,
         bookingHistoryService: BookingHistoryServiceProtocol,
-        checkInService: CheckInServiceProtocol
+        checkInService: CheckInServiceProtocol,
+        groupsChatService: GroupsChatServiceProtocol
     ) {
         self.gymService = gymService
         self.bookingService = bookingService
@@ -50,6 +54,7 @@ final class AppContainer {
         self.walletService = walletService
         self.bookingHistoryService = bookingHistoryService
         self.checkInService = checkInService
+        self.groupsChatService = groupsChatService
     }
     
     // MARK: - Factory Methods
@@ -67,6 +72,7 @@ final class AppContainer {
         let walletService = MockWalletService()
         let bookingHistoryService = MockBookingHistoryService()
         let checkInService = MockCheckInService()
+        let groupsChatService = MockGroupsChatService()
         
         return AppContainer(
             gymService: gymService,
@@ -75,7 +81,8 @@ final class AppContainer {
             notificationService: notificationService,
             walletService: walletService,
             bookingHistoryService: bookingHistoryService,
-            checkInService: checkInService
+            checkInService: checkInService,
+            groupsChatService: groupsChatService
         )
     }
     
@@ -92,6 +99,7 @@ final class AppContainer {
         let walletService = MockWalletService() // TODO: Replace with real wallet service
         let bookingHistoryService = MockBookingHistoryService() // TODO: Replace with real service
         let checkInService = MockCheckInService() // TODO: Replace with real check-in service
+        let groupsChatService = MockGroupsChatService() // Uses mock for offline operation
         
         return AppContainer(
             gymService: gymService,
@@ -100,7 +108,9 @@ final class AppContainer {
             notificationService: notificationService,
             walletService: walletService,
             bookingHistoryService: bookingHistoryService,
-            checkInService: checkInService
+            checkInService: checkInService,
+            groupsChatService: groupsChatService
         )
     }
 }
+

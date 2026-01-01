@@ -65,7 +65,9 @@ struct RootTabView: View {
                 case .gymDetail(let gymId):
                     GymDetailView(gymId: gymId)
                 case .groupDetail(let groupId):
-                    GroupDetailPlaceholderView(groupId: groupId)
+                    GroupChatView(groupId: groupId)
+                case .groupNotFound(let message):
+                    GroupInviteErrorView(message: message)
                 case .bookingHistory:
                     BookingHistoryView()
                 case .bookingDetail(let bookingId):
@@ -82,6 +84,20 @@ struct RootTabView: View {
                     CheckInView(bookingId: bookingId)
                 case .deepLinkSimulator:
                     DeepLinkSimulatorView()
+                case .paymentMethods:
+                    PaymentMethodsView()
+                case .addCard:
+                    AddCardView()
+                case .accountSecurity:
+                    AccountSecurityView()
+                case .changePassword:
+                    ChangePasswordView()
+                case .devicesSessions:
+                    DevicesSessionsView()
+                case .deleteAccount:
+                    DeleteAccountView()
+                case .notificationsPreferences:
+                    NotificationsPreferencesView()
                 }
             }
             .task {

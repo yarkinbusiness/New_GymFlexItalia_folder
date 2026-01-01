@@ -10,12 +10,15 @@ import SwiftUI
 struct ActiveSessionSummaryCard: View {
     let booking: Booking
     let onViewQRCode: () -> Void
+    let onCancel: () -> Void
     
     @StateObject private var viewModel: ActiveSessionViewModel
+    @State private var showCancelConfirmation = false
     
-    init(booking: Booking, onViewQRCode: @escaping () -> Void) {
+    init(booking: Booking, onViewQRCode: @escaping () -> Void, onCancel: @escaping () -> Void = {}) {
         self.booking = booking
         self.onViewQRCode = onViewQRCode
+        self.onCancel = onCancel
         _viewModel = StateObject(wrappedValue: ActiveSessionViewModel(booking: booking))
     }
     
@@ -66,15 +69,32 @@ struct ActiveSessionSummaryCard: View {
             }
             .padding(.top, Spacing.md)
             
-            // View QR Code Button
-            Button(action: onViewQRCode) {
-                Text("View QR Code")
-                    .font(AppFonts.label)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(AppGradients.primary)
-                    .clipShape(RoundedRectangle(cornerRadius: CornerRadii.lg))
+            // Buttons
+            VStack(spacing: Spacing.sm) {
+                // View QR Code Button
+                Button(action: onViewQRCode) {
+                    Text("View QR Code")
+                        .font(AppFonts.label)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(AppGradients.primary)
+                        .clipShape(RoundedRectangle(cornerRadius: CornerRadii.lg))
+                }
+                
+                // Cancel Session Button
+                Button {
+                    DemoTapLogger.log("Home.ActiveSession.CancelTap")
+                    showCancelConfirmation = true
+                } label: {
+                    Text("Cancel Session")
+                        .font(AppFonts.label)
+                        .foregroundColor(AppColors.danger)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(AppColors.danger.opacity(0.15))
+                        .clipShape(RoundedRectangle(cornerRadius: CornerRadii.lg))
+                }
             }
         }
         .padding(Spacing.xl)
@@ -84,5 +104,14 @@ struct ActiveSessionSummaryCard: View {
             RoundedRectangle(cornerRadius: CornerRadii.xl)
                 .stroke(AppColors.border.opacity(0.5), lineWidth: 1)
         )
+        .alert("Cancel Session?", isPresented: $showCancelConfirmation) {
+            Button("Keep Session", role: .cancel) {}
+            Button("Cancel Session", role: .destructive) {
+                DemoTapLogger.log("Home.ActiveSession.Cancel")
+                onCancel()
+            }
+        } message: {
+            Text("No refund will be issued. Are you sure you want to cancel your active session?")
+        }
     }
 }

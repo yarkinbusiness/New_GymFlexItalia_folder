@@ -64,6 +64,22 @@ struct FitnessGroup: Codable, Identifiable {
         guard let max = maxMembers else { return false }
         return memberCount >= max
     }
+    
+    /// Whether this is a private group (inverse of isPublic)
+    var isPrivate: Bool {
+        !isPublic
+    }
+    
+    /// Invite link URL for private group sharing
+    /// Format: gymflex://invite?groupId=<id>
+    var inviteLink: URL {
+        URL(string: "gymflex://invite?groupId=\(id)")!
+    }
+    
+    /// Share text for invite link
+    var shareText: String {
+        "Join my GymFlex group '\(name)': gymflex://invite?groupId=\(id)"
+    }
 }
 
 // MARK: - Group Category

@@ -26,6 +26,7 @@ enum BookingServiceError: LocalizedError {
     case invalidGym
     case slotUnavailable
     case insufficientFunds
+    case activeSessionExists
     case networkError(underlying: Error)
     
     var errorDescription: String? {
@@ -38,6 +39,8 @@ enum BookingServiceError: LocalizedError {
             return "This time slot is not available"
         case .insufficientFunds:
             return "Insufficient wallet balance. Please top up your wallet."
+        case .activeSessionExists:
+            return "You already have an active session. End or cancel it before booking another."
         case .networkError(let error):
             return "Network error: \(error.localizedDescription)"
         }

@@ -2,7 +2,8 @@
 //  GroupsView.swift
 //  Gym Flex Italia
 //
-//  Created by Yarkin Yavuz on 11/14/25.
+//  Groups discovery view using DI via AppContainer.
+//  No legacy GroupsService.shared usage.
 //
 
 import SwiftUI
@@ -12,6 +13,7 @@ struct GroupsView: View {
     
     @StateObject private var viewModel = GroupsViewModel()
     @EnvironmentObject var router: AppRouter
+    @Environment(\.appContainer) var appContainer
     @State private var showCreateGroup = false
     
     var body: some View {
@@ -25,7 +27,7 @@ struct GroupsView: View {
                 headerSection
                 
                 // Groups List
-                if viewModel.filteredGroups.isEmpty {
+                if viewModel.filteredGroups.isEmpty && !viewModel.isLoading {
                     emptyStateView
                 } else {
                     groupsList
@@ -37,10 +39,23 @@ struct GroupsView: View {
             }
         }
         .sheet(isPresented: $showCreateGroup) {
-            CreateGroupView(isPresented: $showCreateGroup)
+            CreateGroupView(
+                isPresented: $showCreateGroup,
+                onGroupCreated: { group in
+                    // Navigate to the new group
+                    if let group = group {
+                        router.pushGroupDetail(groupId: group.id)
+                    }
+                }
+            )
+            .environmentObject(viewModel)
+            .environment(\.appContainer, appContainer)
         }
         .task {
-            await viewModel.loadAllGroups()
+            await viewModel.load(using: appContainer.groupsChatService)
+        }
+        .refreshable {
+            await viewModel.load(using: appContainer.groupsChatService)
         }
     }
     
@@ -176,13 +191,6 @@ struct GroupCard: View {
                     // Meta
                     HStack(spacing: Spacing.sm) {
                         HStack(spacing: 4) {
-                            Image(systemName: "clock.fill")
-                                .font(.system(size: 10))
-                            Text("26d ago")
-                                .font(AppFonts.caption)
-                        }
-                        
-                        HStack(spacing: 4) {
                             Image(systemName: "person.2.fill")
                                 .font(.system(size: 10))
                             Text("\(group.memberCount) member\(group.memberCount == 1 ? "" : "s")")
@@ -193,6 +201,11 @@ struct GroupCard: View {
                 }
                 
                 Spacer()
+                
+                // Chevron
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14))
+                    .foregroundColor(AppColors.textDim)
             }
             .padding(Spacing.md)
             .glassBackground(cornerRadius: CornerRadii.md)
