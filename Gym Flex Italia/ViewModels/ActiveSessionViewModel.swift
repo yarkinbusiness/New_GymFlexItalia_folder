@@ -118,6 +118,9 @@ class ActiveSessionViewModel: ObservableObject {
             // Sync with BookingManager for app-wide state
             BookingManager.shared.setActiveBooking(updatedBooking)
             
+            // Success haptic (debounced via HapticGate)
+            HapticGate.successOnce(key: "extend_session_success")
+            
             // Refresh timer and balance
             calculateTimeRemaining()
             await loadWalletBalance()
@@ -191,7 +194,9 @@ class ActiveSessionViewModel: ObservableObject {
                     ])
                 }
             } catch {
+                #if DEBUG
                 print("Failed to find location: \(error.localizedDescription)")
+                #endif
             }
         }
     }

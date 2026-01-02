@@ -22,10 +22,18 @@ struct WalletFullView: View {
     @State private var hasLoadAttempted = false
     @State private var containerStatus: String = "unknown"
     
+    // Balance change highlight
+    @State private var balanceHighlight = false
+    @State private var previousBalanceCents: Int = -1 // -1 = not yet initialized
+    @State private var hasBalanceInitialized = false
+    
+    // Reduce Motion support
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    
     var body: some View {
         ZStack {
-            // Background
-            AppGradients.background
+            // Layered background (surface0 = deepest layer)
+            theme.colors.surface0
                 .ignoresSafeArea()
             
             if viewModel.isLoading && !hasLoadAttempted {
@@ -246,41 +254,91 @@ struct WalletFullView: View {
     
     // MARK: - Balance Card
     
+    @Environment(\.gfTheme) private var theme
+    
     private var balanceCard: some View {
-        VStack(spacing: Spacing.md) {
-            Text("Current Balance")
-                .font(AppFonts.bodySmall)
-                .foregroundColor(AppColors.textDim)
-                .textCase(.uppercase)
-                .tracking(1)
-            
-            HStack(alignment: .firstTextBaseline, spacing: Spacing.xs) {
-                Text("€")
-                    .font(.system(size: 32, weight: .semibold))
-                    .foregroundColor(AppColors.textHigh)
+        GFCard(padding: GFSpacing.xl) {
+            VStack(spacing: GFSpacing.md) {
+                Text("Current Balance")
+                    .gfCaption(.medium)
+                    .foregroundColor(theme.colors.textSecondary)
+                    .textCase(.uppercase)
+                    .tracking(1)
                 
-                // Use walletStore directly for real-time balance
-                Text(String(format: "%.2f", walletStore.balance))
-                    .font(.system(size: 56, weight: .bold))
-                    .foregroundColor(AppColors.textHigh)
+                HStack(alignment: .firstTextBaseline, spacing: GFSpacing.xs) {
+                    Text("€")
+                        .font(.system(size: 32, weight: .semibold))
+                        .foregroundColor(theme.colors.textPrimary)
+                    
+                    // Animated balance with smooth transitions (respects Reduce Motion)
+                    GFNumberText(
+                        value: walletStore.balance,
+                        formatStyle: .decimal(places: 2),
+                        font: .system(size: 56, weight: .bold),
+                        color: theme.colors.textPrimary
+                    )
+                }
+                
+                Text(walletStore.currency)
+                    .gfCaption()
+                    .foregroundColor(theme.colors.textSecondary)
             }
-            
-            Text(walletStore.currency)
-                .font(AppFonts.caption)
-                .foregroundColor(AppColors.textDim)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, GFSpacing.lg)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Spacing.xxl)
-        .padding(.horizontal, Spacing.xl)
-        .background(
-            RoundedRectangle(cornerRadius: CornerRadii.xl)
-                .fill(AppGradients.primary.opacity(0.15))
-                .overlay(
-                    RoundedRectangle(cornerRadius: CornerRadii.xl)
-                        .stroke(AppColors.brand.opacity(0.3), lineWidth: 1)
+        .overlay(
+            RoundedRectangle(cornerRadius: GFCorners.card)
+                .stroke(
+                    balanceHighlight ? theme.colors.success.opacity(0.6) : theme.colors.primary.opacity(0.2),
+                    lineWidth: balanceHighlight ? 2 : 1
                 )
+                // Only animate if Reduce Motion is OFF
+                .animation(reduceMotion ? nil : GFMotion.confirm, value: balanceHighlight)
         )
         .padding(.horizontal, Spacing.lg)
+        .onChange(of: walletStore.balanceCents) { oldValue, newValue in
+            // Guard: Skip if this is the initial load
+            guard hasBalanceInitialized else {
+                hasBalanceInitialized = true
+                previousBalanceCents = newValue
+                return
+            }
+            
+            // Guard: Skip if no actual change
+            guard oldValue != newValue else { return }
+            
+            // Only highlight and haptic on POSITIVE balance changes (top-up, not refund/debit)
+            let isPositiveChange = newValue > oldValue
+            
+            if isPositiveChange {
+                // Trigger highlight (static if Reduce Motion)
+                if reduceMotion {
+                    // Static highlight - no animation
+                    balanceHighlight = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        balanceHighlight = false
+                    }
+                } else {
+                    // Animated highlight
+                    balanceHighlight = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        balanceHighlight = false
+                    }
+                }
+                
+                // Success haptic (debounced via HapticGate)
+                HapticGate.successOnce(key: "wallet_topup_success")
+            }
+            
+            previousBalanceCents = newValue
+        }
+        .onAppear {
+            // Initialize with current balance
+            if !hasBalanceInitialized {
+                previousBalanceCents = walletStore.balanceCents
+                hasBalanceInitialized = true
+            }
+        }
     }
     
     // MARK: - Quick Actions

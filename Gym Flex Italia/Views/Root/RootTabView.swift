@@ -85,6 +85,8 @@ struct RootTabView: View {
                 #if DEBUG
                 case .deepLinkSimulator:
                     DeepLinkSimulatorView()
+                case .ownerMode:
+                    OwnerModeView()
                 #endif
                 case .paymentMethods:
                     PaymentMethodsView()

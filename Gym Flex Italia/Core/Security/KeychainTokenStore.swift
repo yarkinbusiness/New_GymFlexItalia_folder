@@ -28,7 +28,9 @@ struct KeychainTokenStore {
         clearToken()
         
         guard let tokenData = token.data(using: .utf8) else {
+            #if DEBUG
             print("⚠️ KeychainTokenStore: Failed to encode token")
+            #endif
             return false
         }
         
@@ -43,10 +45,14 @@ struct KeychainTokenStore {
         let status = SecItemAdd(query as CFDictionary, nil)
         
         if status == errSecSuccess {
+            #if DEBUG
             print("🔐 KeychainTokenStore: Token saved successfully")
+            #endif
             return true
         } else {
+            #if DEBUG
             print("⚠️ KeychainTokenStore: Failed to save token (status: \(status))")
+            #endif
             return false
         }
     }
@@ -69,12 +75,16 @@ struct KeychainTokenStore {
               let tokenData = result as? Data,
               let token = String(data: tokenData, encoding: .utf8) else {
             if status != errSecItemNotFound {
+                #if DEBUG
                 print("⚠️ KeychainTokenStore: Failed to load token (status: \(status))")
+                #endif
             }
             return nil
         }
         
+        #if DEBUG
         print("🔐 KeychainTokenStore: Token loaded successfully")
+        #endif
         return token
     }
     
@@ -90,10 +100,14 @@ struct KeychainTokenStore {
         let status = SecItemDelete(query as CFDictionary)
         
         if status == errSecSuccess || status == errSecItemNotFound {
+            #if DEBUG
             print("🔐 KeychainTokenStore: Token cleared")
+            #endif
             return true
         } else {
+            #if DEBUG
             print("⚠️ KeychainTokenStore: Failed to clear token (status: \(status))")
+            #endif
             return false
         }
     }

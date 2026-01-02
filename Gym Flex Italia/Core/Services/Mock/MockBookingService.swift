@@ -127,6 +127,8 @@ final class MockBookingService: BookingServiceProtocol {
         // Also update BookingManager for active session tracking
         BookingManager.shared.setActiveBooking(booking)
         
+        // Note: Haptics are triggered at UI layer, not here
+        
         return BookingConfirmation(
             bookingId: bookingId,
             gymId: gymId,

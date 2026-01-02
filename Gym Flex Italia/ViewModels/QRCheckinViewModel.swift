@@ -144,7 +144,9 @@ final class QRCheckinViewModel: ObservableObject {
                 showLevelUp = true
             }
         } catch {
+            #if DEBUG
             print("Failed to record workout: \(error)")
+            #endif
         }
     }
     

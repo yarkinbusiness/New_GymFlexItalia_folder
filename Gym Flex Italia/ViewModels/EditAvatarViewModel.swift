@@ -31,10 +31,14 @@ final class EditAvatarViewModel: ObservableObject {
             let fetchedProfile = try await service.fetchCurrentProfile()
             profile = fetchedProfile
             selectedStyle = fetchedProfile.avatarStyle
+            #if DEBUG
             print("✅ EditAvatarViewModel.load: Loaded profile with style \(selectedStyle.rawValue)")
+            #endif
         } catch {
             errorMessage = error.localizedDescription
+            #if DEBUG
             print("⚠️ EditAvatarViewModel.load: \(error)")
+            #endif
         }
         
         isLoading = false
@@ -60,12 +64,16 @@ final class EditAvatarViewModel: ObservableObject {
             let saved = try await service.updateProfile(updatedProfile)
             profile = saved
             successMessage = "Avatar updated!"
+            #if DEBUG
             print("✅ EditAvatarViewModel.save: Saved avatar style \(selectedStyle.rawValue)")
+            #endif
             isSaving = false
             return true
         } catch {
             errorMessage = error.localizedDescription
+            #if DEBUG
             print("⚠️ EditAvatarViewModel.save: \(error)")
+            #endif
             isSaving = false
             return false
         }

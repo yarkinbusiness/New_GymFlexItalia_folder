@@ -109,16 +109,21 @@ struct BookingHistoryView: View {
         Group {
             if viewModel.hasUpcoming {
                 ScrollView {
-                    LazyVStack(spacing: Spacing.md) {
-                        ForEach(viewModel.upcomingBookings) { booking in
-                            BookingCard(booking: booking) {
-                                DemoTapLogger.log("BookingHistory.SelectBooking", context: "id: \(booking.id)")
-                                router.pushBookingDetail(bookingId: booking.id)
+                    VStack(alignment: .leading, spacing: GFSpacing.sm) {
+                        GFSectionHeader("Upcoming")
+                            .padding(.horizontal, GFSpacing.lg)
+                        
+                        LazyVStack(spacing: GFSpacing.md) {
+                            ForEach(viewModel.upcomingBookings) { booking in
+                                BookingCard(booking: booking) {
+                                    DemoTapLogger.log("BookingHistory.SelectBooking", context: "id: \(booking.id)")
+                                    router.pushBookingDetail(bookingId: booking.id)
+                                }
                             }
                         }
+                        .padding(.horizontal, GFSpacing.lg)
+                        .padding(.bottom, 100)
                     }
-                    .padding(.horizontal, Spacing.lg)
-                    .padding(.bottom, 100)
                 }
             } else {
                 emptyUpcomingView
@@ -132,16 +137,21 @@ struct BookingHistoryView: View {
         Group {
             if viewModel.hasPast {
                 ScrollView {
-                    LazyVStack(spacing: Spacing.md) {
-                        ForEach(viewModel.pastBookings) { booking in
-                            BookingCard(booking: booking) {
-                                DemoTapLogger.log("BookingHistory.SelectBooking", context: "id: \(booking.id)")
-                                router.pushBookingDetail(bookingId: booking.id)
+                    VStack(alignment: .leading, spacing: GFSpacing.sm) {
+                        GFSectionHeader("Past")
+                            .padding(.horizontal, GFSpacing.lg)
+                        
+                        LazyVStack(spacing: GFSpacing.md) {
+                            ForEach(viewModel.pastBookings) { booking in
+                                BookingCard(booking: booking) {
+                                    DemoTapLogger.log("BookingHistory.SelectBooking", context: "id: \(booking.id)")
+                                    router.pushBookingDetail(bookingId: booking.id)
+                                }
                             }
                         }
+                        .padding(.horizontal, GFSpacing.lg)
+                        .padding(.bottom, 100)
                     }
-                    .padding(.horizontal, Spacing.lg)
-                    .padding(.bottom, 100)
                 }
             } else {
                 emptyPastView
@@ -292,9 +302,10 @@ struct BookingCard: View {
                     }
                 }
             }
-            .padding(Spacing.lg)
+            .padding(GFSpacing.lg)
             .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: CornerRadii.lg))
+            .clipShape(RoundedRectangle(cornerRadius: GFCorners.card))
+            .gfSubtleShadow()
         }
         .buttonStyle(.plain)
     }
@@ -318,33 +329,27 @@ struct BookingStatusBadge: View {
     let status: BookingStatus
     
     var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: status.icon)
-                .font(.system(size: 10))
-            Text(status.displayName)
-                .font(AppFonts.caption)
-        }
-        .foregroundColor(statusColor)
-        .padding(.horizontal, Spacing.sm)
-        .padding(.vertical, 4)
-        .background(statusColor.opacity(0.15))
-        .clipShape(Capsule())
+        GFStatusBadge(
+            status.displayName,
+            style: badgeStyle,
+            icon: status.icon
+        )
     }
     
-    private var statusColor: Color {
+    private var badgeStyle: GFBadgeStyle {
         switch status {
         case .confirmed:
-            return .blue
+            return .success
         case .checkedIn:
-            return .green
+            return .success
         case .completed:
-            return .gray
+            return .info
         case .cancelled:
-            return .red
+            return .danger
         case .pending:
-            return .orange
+            return .warning
         case .noShow:
-            return .red
+            return .danger
         }
     }
 }

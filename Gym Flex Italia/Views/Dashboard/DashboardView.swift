@@ -19,14 +19,16 @@ struct DashboardView: View {
     @EnvironmentObject var locationService: LocationService
     @Environment(\.appContainer) var appContainer
     
+    @Environment(\.gfTheme) private var theme
+    
     var body: some View {
         ZStack {
-            // Adaptive background
-            Color(.systemBackground)
+            // Layered background (surface0 = deepest layer)
+            theme.colors.surface0
                 .ignoresSafeArea()
             
             ScrollView {
-                VStack(spacing: Spacing.lg) {
+                VStack(spacing: GFSpacing.xl) {
                     // Header Section
                     headerSection
                     
@@ -54,8 +56,8 @@ struct DashboardView: View {
                     // Recent Activity Section
                     recentActivitySection
                 }
-                .padding(.horizontal, Spacing.md)
-                .padding(.top, Spacing.md)
+                .padding(.horizontal, GFSpacing.lg)
+                .padding(.top, GFSpacing.lg)
                 .padding(.bottom, 100) // Space for tab bar
             }
             .refreshable {

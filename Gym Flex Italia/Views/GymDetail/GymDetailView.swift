@@ -116,6 +116,12 @@ struct GymDetailView: View {
                 Text("Reference: \(confirmation.referenceCode)\n\nYou're all set! Show this code at the gym.")
             }
         }
+        .onChange(of: showConfirmationAlert) { _, isShowing in
+            // Fire success haptic when confirmation alert appears
+            if isShowing {
+                HapticGate.successOnce(key: "booking_confirmed")
+            }
+        }
     }
     
     // MARK: - Booking Confirmation Banner

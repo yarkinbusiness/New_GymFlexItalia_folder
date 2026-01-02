@@ -37,49 +37,49 @@ struct NearbyGymCard: View {
         Button {
             // Navigate to gym detail
         } label: {
-            HStack(alignment: .center, spacing: Spacing.md) {
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text(name ?? "Gym")
-                        .font(AppFonts.h5)
-                        .foregroundColor(AppColors.textHigh)
-                    
-                    HStack(spacing: 4) {
-                        Text(address ?? "")
-                            .font(AppFonts.bodySmall)
-                            .foregroundColor(AppColors.textDim)
-                            .lineLimit(1)
+            GFCard(padding: GFSpacing.md, showShadow: false) {
+                HStack(alignment: .center, spacing: GFSpacing.md) {
+                    VStack(alignment: .leading, spacing: GFSpacing.xs) {
+                        Text(name ?? "Gym")
+                            .gfSection()
+                            .foregroundColor(.primary)
                         
-                        if let distance = distance {
-                            Text("• \(distance)")
-                                .font(AppFonts.bodySmall)
-                                .foregroundColor(AppColors.brand)
+                        HStack(spacing: 4) {
+                            Text(address ?? "")
+                                .gfCaption()
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                            
+                            if let distance = distance {
+                                Text("• \(distance)")
+                                    .gfCaption(.medium)
+                                    .foregroundColor(AppColors.brand)
+                            }
                         }
                     }
-                }
-                
-                Spacer()
-                
-                VStack(alignment: .trailing, spacing: Spacing.xs) {
-                    if let price = price {
-                        Text(price)
-                            .font(AppFonts.h5)
-                            .foregroundColor(AppColors.brand)
-                    }
                     
-                    if let rating = rating {
-                        HStack(spacing: 4) {
-                            Image(systemName: "star.fill")
-                                .font(.system(size: 12))
-                                .foregroundColor(AppColors.warning)
-                            Text(String(format: "%.1f", rating))
-                                .font(AppFonts.bodySmall)
-                                .foregroundColor(AppColors.textHigh)
+                    Spacer()
+                    
+                    VStack(alignment: .trailing, spacing: GFSpacing.xs) {
+                        if let price = price {
+                            Text(price)
+                                .gfSection(.bold)
+                                .foregroundColor(AppColors.brand)
+                        }
+                        
+                        if let rating = rating {
+                            HStack(spacing: 4) {
+                                Image(systemName: "star.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(AppColors.warning)
+                                Text(String(format: "%.1f", rating))
+                                    .gfCaption(.medium)
+                                    .foregroundColor(.primary)
+                            }
                         }
                     }
                 }
             }
-            .padding(Spacing.md)
-            .glassBackground(cornerRadius: CornerRadii.md)
         }
         .buttonStyle(PlainButtonStyle())
     }

@@ -31,10 +31,14 @@ final class UpdateGoalsViewModel: ObservableObject {
             let fetchedProfile = try await service.fetchCurrentProfile()
             profile = fetchedProfile
             selectedGoals = Set(fetchedProfile.fitnessGoals)
+            #if DEBUG
             print("✅ UpdateGoalsViewModel.load: Loaded \(selectedGoals.count) goals")
+            #endif
         } catch {
             errorMessage = error.localizedDescription
+            #if DEBUG
             print("⚠️ UpdateGoalsViewModel.load: \(error)")
+            #endif
         }
         
         isLoading = false
@@ -74,12 +78,16 @@ final class UpdateGoalsViewModel: ObservableObject {
             let saved = try await service.updateProfile(updatedProfile)
             profile = saved
             successMessage = "Goals updated!"
+            #if DEBUG
             print("✅ UpdateGoalsViewModel.save: Saved \(selectedGoals.count) goals")
+            #endif
             isSaving = false
             return true
         } catch {
             errorMessage = error.localizedDescription
+            #if DEBUG
             print("⚠️ UpdateGoalsViewModel.save: \(error)")
+            #endif
             isSaving = false
             return false
         }

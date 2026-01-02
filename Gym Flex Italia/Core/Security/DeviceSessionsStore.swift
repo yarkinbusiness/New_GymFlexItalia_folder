@@ -52,22 +52,30 @@ final class DeviceSessionsStore: ObservableObject {
             seedDemoSessions()
         }
         
+        #if DEBUG
         print("📱 DeviceSessionsStore.init: Loaded \(sessions.count) sessions")
+        #endif
     }
     
     // MARK: - Persistence
     
     private func load() {
         guard let data = UserDefaults.standard.data(forKey: Self.persistenceKey) else {
+            #if DEBUG
             print("📱 DeviceSessionsStore.load: No persisted data")
+            #endif
             return
         }
         
         do {
             sessions = try JSONDecoder().decode([DeviceSession].self, from: data)
+            #if DEBUG
             print("📱 DeviceSessionsStore.load: Loaded \(sessions.count) sessions")
+            #endif
         } catch {
+            #if DEBUG
             print("⚠️ DeviceSessionsStore.load: Failed to decode: \(error)")
+            #endif
         }
     }
     
@@ -75,9 +83,13 @@ final class DeviceSessionsStore: ObservableObject {
         do {
             let data = try JSONEncoder().encode(sessions)
             UserDefaults.standard.set(data, forKey: Self.persistenceKey)
+            #if DEBUG
             print("📱 DeviceSessionsStore.save: Saved \(sessions.count) sessions")
+            #endif
         } catch {
+            #if DEBUG
             print("⚠️ DeviceSessionsStore.save: Failed to encode: \(error)")
+            #endif
         }
     }
     
@@ -86,19 +98,25 @@ final class DeviceSessionsStore: ObservableObject {
     /// Sign out a specific session
     func signOut(sessionId: String) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionId }) else {
+            #if DEBUG
             print("⚠️ DeviceSessionsStore.signOut: Session not found")
+            #endif
             return
         }
         
         // Cannot sign out current device
         guard !sessions[index].isCurrentDevice else {
+            #if DEBUG
             print("⚠️ DeviceSessionsStore.signOut: Cannot sign out current device")
+            #endif
             return
         }
         
         let removed = sessions.remove(at: index)
         save()
+        #if DEBUG
         print("📱 DeviceSessionsStore.signOut: Removed \(removed.deviceName)")
+        #endif
     }
     
     /// Sign out all sessions except current device
@@ -106,7 +124,9 @@ final class DeviceSessionsStore: ObservableObject {
         let removedCount = otherSessions.count
         sessions = sessions.filter { $0.isCurrentDevice }
         save()
+        #if DEBUG
         print("📱 DeviceSessionsStore.signOutAllOtherSessions: Removed \(removedCount) sessions")
+        #endif
     }
     
     // MARK: - Seed Data
@@ -146,7 +166,9 @@ final class DeviceSessionsStore: ObservableObject {
         ]
         
         save()
+        #if DEBUG
         print("📱 DeviceSessionsStore: Seeded \(sessions.count) demo sessions")
+        #endif
     }
     
     // MARK: - Reset
@@ -155,6 +177,8 @@ final class DeviceSessionsStore: ObservableObject {
         sessions = []
         UserDefaults.standard.removeObject(forKey: Self.persistenceKey)
         seedDemoSessions()
+        #if DEBUG
         print("📱 DeviceSessionsStore.reset: Reset to defaults")
+        #endif
     }
 }

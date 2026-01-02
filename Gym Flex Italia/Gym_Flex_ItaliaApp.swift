@@ -53,6 +53,7 @@ struct Gym_Flex_ItaliaApp: App {
                 .environmentObject(deepLinkQueue)
                 .environmentObject(notificationPermissionManager)
                 .preferredColorScheme(settingsStore.preferredColorScheme)
+                .withGFTheme() // Inject design system theme
                 .onAppear {
                     // Request location permission
                     locationService.requestLocationPermission()

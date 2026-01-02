@@ -126,7 +126,9 @@ final class ProfileViewModel: ObservableObject {
             lastBookingSummary = nil
         }
         
+        #if DEBUG
         print("👤 ProfileViewModel.loadBookingStatistics: upcoming=\(upcomingCount), past=\(pastCount)")
+        #endif
     }
     
     // MARK: - Computed Properties

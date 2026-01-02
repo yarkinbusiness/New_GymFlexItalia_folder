@@ -84,20 +84,20 @@ struct DiscoveryFilterSheet: View {
             Toggle("Filter by Distance", isOn: $distanceEnabled.animation())
             
             if distanceEnabled {
-                VStack(alignment: .leading, spacing: Spacing.sm) {
+                VStack(alignment: .leading, spacing: GFSpacing.sm) {
                     HStack {
                         Text("Maximum Distance")
-                            .font(AppFonts.body)
+                            .gfBody()
                         
                         Spacer()
                         
                         Text("\(Int(maxDistance)) km")
-                            .font(AppFonts.bodySmall)
+                            .gfCaption(.medium)
                             .foregroundColor(AppColors.brand)
-                            .padding(.horizontal, Spacing.sm)
+                            .padding(.horizontal, GFSpacing.sm)
                             .padding(.vertical, 4)
                             .background(AppColors.brand.opacity(0.1))
-                            .cornerRadius(CornerRadii.sm)
+                            .clipShape(RoundedRectangle(cornerRadius: GFCorners.micro))
                     }
                     
                     Slider(value: $maxDistance, in: 1...20, step: 1)
@@ -120,26 +120,26 @@ struct DiscoveryFilterSheet: View {
             Toggle("Filter by Price", isOn: $priceEnabled.animation())
             
             if priceEnabled {
-                VStack(alignment: .leading, spacing: Spacing.md) {
+                VStack(alignment: .leading, spacing: GFSpacing.md) {
                     HStack {
                         Text("Price Range")
-                            .font(AppFonts.body)
+                            .gfBody()
                         
                         Spacer()
                         
                         Text("€\(String(format: "%.0f", minPrice)) - €\(String(format: "%.0f", maxPrice))/hr")
-                            .font(AppFonts.bodySmall)
+                            .gfCaption(.medium)
                             .foregroundColor(AppColors.success)
-                            .padding(.horizontal, Spacing.sm)
+                            .padding(.horizontal, GFSpacing.sm)
                             .padding(.vertical, 4)
                             .background(AppColors.success.opacity(0.1))
-                            .cornerRadius(CornerRadii.sm)
+                            .clipShape(RoundedRectangle(cornerRadius: GFCorners.micro))
                     }
                     
                     // Min Price
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Min: €\(String(format: "%.0f", minPrice))")
-                            .font(AppFonts.caption)
+                            .gfCaption()
                             .foregroundColor(.secondary)
                         Slider(value: $minPrice, in: 0...min(maxPrice - 1, 15), step: 1)
                             .tint(AppColors.success)
@@ -148,7 +148,7 @@ struct DiscoveryFilterSheet: View {
                     // Max Price
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Max: €\(String(format: "%.0f", maxPrice))")
-                            .font(AppFonts.caption)
+                            .gfCaption()
                             .foregroundColor(.secondary)
                         Slider(value: $maxPrice, in: max(minPrice + 1, 1)...20, step: 1)
                             .tint(AppColors.success)
@@ -167,10 +167,10 @@ struct DiscoveryFilterSheet: View {
             Toggle("Minimum Rating", isOn: $ratingEnabled.animation())
             
             if ratingEnabled {
-                VStack(alignment: .leading, spacing: Spacing.sm) {
+                VStack(alignment: .leading, spacing: GFSpacing.sm) {
                     HStack {
                         Text("Minimum")
-                            .font(AppFonts.body)
+                            .gfBody()
                         
                         Spacer()
                         
@@ -179,11 +179,11 @@ struct DiscoveryFilterSheet: View {
                                 .foregroundColor(.yellow)
                             Text(String(format: "%.1f", minRating))
                         }
-                        .font(AppFonts.bodySmall)
-                        .padding(.horizontal, Spacing.sm)
+                        .gfCaption(.medium)
+                        .padding(.horizontal, GFSpacing.sm)
                         .padding(.vertical, 4)
                         .background(Color.yellow.opacity(0.15))
-                        .cornerRadius(CornerRadii.sm)
+                        .clipShape(RoundedRectangle(cornerRadius: GFCorners.micro))
                     }
                     
                     Slider(value: $minRating, in: 1...5, step: 0.5)

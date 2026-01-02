@@ -19,7 +19,9 @@ struct BiometricAvailability {
         var error: NSError?
         
         guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
+            #if DEBUG
             print("🔐 BiometricAvailability: Not available - \(error?.localizedDescription ?? "unknown")")
+            #endif
             return nil
         }
         

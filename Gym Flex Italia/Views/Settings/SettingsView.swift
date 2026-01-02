@@ -395,6 +395,18 @@ struct SettingsView: View {
                 )
             }
             
+            // Open Owner Mode (QR Validator)
+            Button {
+                DemoTapLogger.log("Debug.OpenOwnerMode")
+                router.pushOwnerMode()
+            } label: {
+                SettingsRow(
+                    icon: "qrcode.viewfinder",
+                    iconColor: .indigo,
+                    title: "Owner Mode (QR Validate)"
+                )
+            }
+            
             HStack {
                 SettingsRow(
                     icon: "flag.fill",

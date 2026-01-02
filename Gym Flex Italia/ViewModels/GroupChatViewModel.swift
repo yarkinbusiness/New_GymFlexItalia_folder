@@ -64,7 +64,9 @@ final class GroupChatViewModel: ObservableObject {
     /// Refresh membership status from store
     func refreshMembership(groupId: String) {
         isMember = MockGroupsStore.shared.isMember(groupId: groupId, userId: currentUserId)
+        #if DEBUG
         print("👤 GroupChatViewModel.refreshMembership: groupId=\(groupId), isMember=\(isMember)")
+        #endif
     }
     
     func refreshMessages(using service: GroupsChatServiceProtocol) async {
@@ -99,12 +101,16 @@ final class GroupChatViewModel: ObservableObject {
             
             didJoinSuccessfully = true
             DemoTapLogger.log("Group.Join.Success.\(groupId)")
+            #if DEBUG
             print("✅ GroupChatViewModel.joinGroup: Successfully joined \(groupId)")
+            #endif
             isJoining = false
             return true
         } catch {
             errorMessage = error.localizedDescription
+            #if DEBUG
             print("❌ GroupChatViewModel.joinGroup: Failed - \(error.localizedDescription)")
+            #endif
             isJoining = false
             return false
         }
@@ -132,12 +138,16 @@ final class GroupChatViewModel: ObservableObject {
             
             didLeaveSuccessfully = true
             DemoTapLogger.log("Group.Leave.Success.\(groupId)")
+            #if DEBUG
             print("✅ GroupChatViewModel.leaveGroup: Successfully left \(groupId)")
+            #endif
             isLeaving = false
             return true
         } catch {
             errorMessage = error.localizedDescription
+            #if DEBUG
             print("❌ GroupChatViewModel.leaveGroup: Failed - \(error.localizedDescription)")
+            #endif
             isLeaving = false
             return false
         }

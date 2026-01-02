@@ -138,9 +138,9 @@ struct ProfileView: View {
             DemoTapLogger.log("Profile.WalletSummary")
             router.pushWallet()
         } label: {
-            HStack(spacing: Spacing.md) {
+            HStack(spacing: GFSpacing.md) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: CornerRadii.sm)
+                    RoundedRectangle(cornerRadius: GFCorners.micro)
                         .fill(AppColors.success.opacity(0.2))
                         .frame(width: 40, height: 40)
                     
@@ -151,12 +151,12 @@ struct ProfileView: View {
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Wallet Balance")
-                        .font(AppFonts.bodySmall)
-                        .foregroundColor(Color(.secondaryLabel))
+                        .gfCaption()
+                        .foregroundColor(.secondary)
                     
                     Text(viewModel.formattedWalletBalance)
-                        .font(AppFonts.h3)
-                        .foregroundColor(Color(.label))
+                        .gfTitle(.bold)
+                        .foregroundColor(.primary)
                 }
                 
                 Spacer()
@@ -165,10 +165,10 @@ struct ProfileView: View {
                     .font(.system(size: 14))
                     .foregroundColor(Color(.tertiaryLabel))
             }
-            .padding(Spacing.lg)
+            .padding(GFSpacing.lg)
             .background(Color(.secondarySystemBackground))
-            .cornerRadius(CornerRadii.lg)
-            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
+            .clipShape(RoundedRectangle(cornerRadius: GFCorners.card))
+            .gfSubtleShadow()
         }
         .buttonStyle(.plain)
     }
@@ -179,9 +179,9 @@ struct ProfileView: View {
             DemoTapLogger.log("Profile.PaymentMethods")
             router.pushPaymentMethods()
         } label: {
-            HStack(spacing: Spacing.md) {
+            HStack(spacing: GFSpacing.md) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: CornerRadii.sm)
+                    RoundedRectangle(cornerRadius: GFCorners.micro)
                         .fill(AppColors.accent.opacity(0.2))
                         .frame(width: 40, height: 40)
                     
@@ -192,13 +192,13 @@ struct ProfileView: View {
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Payment Methods")
-                        .font(AppFonts.body)
-                        .foregroundColor(Color(.label))
+                        .gfBody()
+                        .foregroundColor(.primary)
                     
                     let cardCount = PaymentMethodsStore.shared.cards.count
                     Text(cardCount == 0 ? "Add a payment method" : "\(cardCount) card\(cardCount == 1 ? "" : "s") saved")
-                        .font(AppFonts.caption)
-                        .foregroundColor(Color(.secondaryLabel))
+                        .gfCaption()
+                        .foregroundColor(.secondary)
                 }
                 
                 Spacer()
@@ -207,10 +207,10 @@ struct ProfileView: View {
                     .font(.system(size: 14))
                     .foregroundColor(Color(.tertiaryLabel))
             }
-            .padding(Spacing.lg)
+            .padding(GFSpacing.lg)
             .background(Color(.secondarySystemBackground))
-            .cornerRadius(CornerRadii.lg)
-            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
+            .clipShape(RoundedRectangle(cornerRadius: GFCorners.card))
+            .gfSubtleShadow()
         }
         .buttonStyle(.plain)
     }
@@ -221,9 +221,9 @@ struct ProfileView: View {
             DemoTapLogger.log("Profile.AccountSecurity")
             router.pushAccountSecurity()
         } label: {
-            HStack(spacing: Spacing.md) {
+            HStack(spacing: GFSpacing.md) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: CornerRadii.sm)
+                    RoundedRectangle(cornerRadius: GFCorners.micro)
                         .fill(AppColors.brand.opacity(0.2))
                         .frame(width: 40, height: 40)
                     
@@ -234,12 +234,12 @@ struct ProfileView: View {
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Account & Security")
-                        .font(AppFonts.body)
-                        .foregroundColor(Color(.label))
+                        .gfBody()
+                        .foregroundColor(.primary)
                     
                     Text("Password, biometrics, devices")
-                        .font(AppFonts.caption)
-                        .foregroundColor(Color(.secondaryLabel))
+                        .gfCaption()
+                        .foregroundColor(.secondary)
                 }
                 
                 Spacer()
@@ -248,10 +248,10 @@ struct ProfileView: View {
                     .font(.system(size: 14))
                     .foregroundColor(Color(.tertiaryLabel))
             }
-            .padding(Spacing.lg)
+            .padding(GFSpacing.lg)
             .background(Color(.secondarySystemBackground))
-            .cornerRadius(CornerRadii.lg)
-            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
+            .clipShape(RoundedRectangle(cornerRadius: GFCorners.card))
+            .gfSubtleShadow()
         }
         .buttonStyle(.plain)
     }
@@ -262,9 +262,9 @@ struct ProfileView: View {
             DemoTapLogger.log("Profile.Notifications")
             router.pushNotificationsPreferences()
         } label: {
-            HStack(spacing: Spacing.md) {
+            HStack(spacing: GFSpacing.md) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: CornerRadii.sm)
+                    RoundedRectangle(cornerRadius: GFCorners.micro)
                         .fill(AppColors.warning.opacity(0.2))
                         .frame(width: 40, height: 40)
                     
@@ -275,12 +275,12 @@ struct ProfileView: View {
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Notifications & Preferences")
-                        .font(AppFonts.body)
-                        .foregroundColor(Color(.label))
+                        .gfBody()
+                        .foregroundColor(.primary)
                     
                     Text("Reminders, alerts, quiet hours")
-                        .font(AppFonts.caption)
-                        .foregroundColor(Color(.secondaryLabel))
+                        .gfCaption()
+                        .foregroundColor(.secondary)
                 }
                 
                 Spacer()
@@ -289,10 +289,10 @@ struct ProfileView: View {
                     .font(.system(size: 14))
                     .foregroundColor(Color(.tertiaryLabel))
             }
-            .padding(Spacing.lg)
+            .padding(GFSpacing.lg)
             .background(Color(.secondarySystemBackground))
-            .cornerRadius(CornerRadii.lg)
-            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
+            .clipShape(RoundedRectangle(cornerRadius: GFCorners.card))
+            .gfSubtleShadow()
         }
         .buttonStyle(.plain)
     }
@@ -303,9 +303,9 @@ struct ProfileView: View {
             DemoTapLogger.log("Profile.HelpSupport")
             router.pushHelpSupport()
         } label: {
-            HStack(spacing: Spacing.md) {
+            HStack(spacing: GFSpacing.md) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: CornerRadii.sm)
+                    RoundedRectangle(cornerRadius: GFCorners.micro)
                         .fill(AppColors.success.opacity(0.2))
                         .frame(width: 40, height: 40)
                     
@@ -316,12 +316,12 @@ struct ProfileView: View {
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Help & Support")
-                        .font(AppFonts.body)
-                        .foregroundColor(Color(.label))
+                        .gfBody()
+                        .foregroundColor(.primary)
                     
                     Text("FAQ, contact, legal")
-                        .font(AppFonts.caption)
-                        .foregroundColor(Color(.secondaryLabel))
+                        .gfCaption()
+                        .foregroundColor(.secondary)
                 }
                 
                 Spacer()
@@ -330,10 +330,10 @@ struct ProfileView: View {
                     .font(.system(size: 14))
                     .foregroundColor(Color(.tertiaryLabel))
             }
-            .padding(Spacing.lg)
+            .padding(GFSpacing.lg)
             .background(Color(.secondarySystemBackground))
-            .cornerRadius(CornerRadii.lg)
-            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
+            .clipShape(RoundedRectangle(cornerRadius: GFCorners.card))
+            .gfSubtleShadow()
         }
         .buttonStyle(.plain)
     }

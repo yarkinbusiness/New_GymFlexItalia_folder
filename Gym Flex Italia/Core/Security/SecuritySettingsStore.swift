@@ -68,14 +68,18 @@ final class SecuritySettingsStore: ObservableObject {
     
     private init() {
         load()
+        #if DEBUG
         print("🔐 SecuritySettingsStore.init: biometric=\(biometricLockEnabled), 2FA=\(twoFactorEnabled)")
+        #endif
     }
     
     // MARK: - Persistence
     
     private func load() {
         guard let data = UserDefaults.standard.data(forKey: Self.persistenceKey) else {
+            #if DEBUG
             print("🔐 SecuritySettingsStore.load: No persisted data, using defaults")
+            #endif
             return
         }
         
@@ -85,9 +89,13 @@ final class SecuritySettingsStore: ObservableObject {
             requireBiometricOnLaunch = decoded.requireBiometricOnLaunch
             twoFactorEnabled = decoded.twoFactorEnabled
             lastPasswordChangeAt = decoded.lastPasswordChangeAt
+            #if DEBUG
             print("🔐 SecuritySettingsStore.load: Loaded settings")
+            #endif
         } catch {
+            #if DEBUG
             print("⚠️ SecuritySettingsStore.load: Failed to decode: \(error)")
+            #endif
         }
     }
     
@@ -102,9 +110,13 @@ final class SecuritySettingsStore: ObservableObject {
         do {
             let encoded = try JSONEncoder().encode(data)
             UserDefaults.standard.set(encoded, forKey: Self.persistenceKey)
+            #if DEBUG
             print("🔐 SecuritySettingsStore.save: Saved settings")
+            #endif
         } catch {
+            #if DEBUG
             print("⚠️ SecuritySettingsStore.save: Failed to encode: \(error)")
+            #endif
         }
     }
     
@@ -116,6 +128,8 @@ final class SecuritySettingsStore: ObservableObject {
         twoFactorEnabled = false
         lastPasswordChangeAt = nil
         UserDefaults.standard.removeObject(forKey: Self.persistenceKey)
+        #if DEBUG
         print("🔐 SecuritySettingsStore.reset: Cleared all settings")
+        #endif
     }
 }

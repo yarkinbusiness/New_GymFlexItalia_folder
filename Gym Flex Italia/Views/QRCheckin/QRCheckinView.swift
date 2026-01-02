@@ -256,37 +256,35 @@ struct QRCheckinView: View {
     
     // MARK: - Status Section
     private var statusSection: some View {
-        VStack(spacing: Spacing.md) {
-            // Status Badge
-            HStack {
-                Circle()
-                    .fill(viewModel.isExpired ? AppColors.danger : AppColors.success)
-                    .frame(width: 8, height: 8)
+        GFCard(padding: GFSpacing.xl) {
+            VStack(spacing: GFSpacing.md) {
+                // Status Badge
+                HStack {
+                    Circle()
+                        .fill(viewModel.isExpired ? AppColors.danger : AppColors.success)
+                        .frame(width: 8, height: 8)
+                    
+                    Text(viewModel.isExpired ? "Session Expired" : "Active Session")
+                        .font(AppFonts.label)
+                        .foregroundColor(viewModel.isExpired ? AppColors.danger : AppColors.success)
+                        .textCase(.uppercase)
+                        .tracking(1)
+                }
+                .padding(.horizontal, GFSpacing.md)
+                .padding(.vertical, GFSpacing.sm)
+                .background(
+                    Capsule()
+                        .fill(viewModel.isExpired ? AppColors.danger.opacity(0.2) : AppColors.success.opacity(0.2))
+                )
                 
-                Text(viewModel.isExpired ? "Session Expired" : "Active Session")
-                    .font(AppFonts.label)
-                    .foregroundColor(viewModel.isExpired ? AppColors.danger : AppColors.success)
-                    .textCase(.uppercase)
-                    .tracking(1)
+                // Timer
+                Text(viewModel.formattedTimeRemaining)
+                    .font(.system(size: 56, weight: .bold, design: .rounded))
+                    .foregroundColor(viewModel.isExpired ? AppColors.danger : Color(.label))
+                    .monospacedDigit()
             }
-            .padding(.horizontal, Spacing.md)
-            .padding(.vertical, Spacing.sm)
-            .background(
-                Capsule()
-                    .fill(viewModel.isExpired ? AppColors.danger.opacity(0.2) : AppColors.success.opacity(0.2))
-            )
-            
-            // Timer
-            Text(viewModel.formattedTimeRemaining)
-                .font(.system(size: 56, weight: .bold, design: .rounded))
-                .foregroundColor(viewModel.isExpired ? AppColors.danger : Color(.label))
-                .monospacedDigit()
+            .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: .infinity)
-        .padding(Spacing.xl)
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(CornerRadii.xl)
-        .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 5)
     }
     
     // MARK: - Gym Info Section

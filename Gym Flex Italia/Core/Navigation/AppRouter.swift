@@ -35,6 +35,7 @@ enum AppRoute: Hashable {
     case privacy
     case editAvatar
     case updateGoals
+    case ownerMode  // DEBUG-only: QR validation for gym owners
 }
 
 /// Central navigation state owner for consistent navigation across the app
@@ -273,6 +274,11 @@ final class AppRouter: ObservableObject {
     #if DEBUG
     func pushDeepLinkSimulator() {
         appendRoute(.deepLinkSimulator)
+    }
+    
+    /// Navigate to owner mode QR validator (debug only)
+    func pushOwnerMode() {
+        appendRoute(.ownerMode)
     }
     #endif
     
