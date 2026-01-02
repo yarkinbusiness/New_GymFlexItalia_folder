@@ -19,6 +19,7 @@ struct WalletFullView: View {
     @StateObject private var viewModel = WalletFullViewModel()
     
     @State private var showTopUpSheet = false
+    @State private var showSendSheet = false
     @State private var hasLoadAttempted = false
     @State private var containerStatus: String = "unknown"
     
@@ -64,6 +65,9 @@ struct WalletFullView: View {
         }
         .sheet(isPresented: $showTopUpSheet) {
             topUpSheet
+        }
+        .sheet(isPresented: $showSendSheet) {
+            SendMoneySheetView()
         }
         .task {
             await loadWallet()
@@ -200,55 +204,58 @@ struct WalletFullView: View {
     // MARK: - Main Content
     
     private var mainContent: some View {
-        ScrollView {
-            VStack(spacing: Spacing.xl) {
-                // DEBUG: Success diagnostics banner
-                #if DEBUG
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("DEBUG: Wallet Loaded ✅ (using WalletStore)")
-                        .font(AppFonts.caption)
-                        .foregroundColor(.green)
-                    Text("balance: \(walletStore.formattedBalance) | tx: \(walletStore.transactions.count) | persisted: ✅")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(.green)
-                }
-                .padding(Spacing.sm)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.green.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: CornerRadii.sm))
-                .padding(.horizontal, Spacing.lg)
-                #endif
-                
-                // Error Banner
-                if let error = viewModel.errorMessage {
-                    InlineErrorBanner(
-                        message: error,
-                        type: .error,
-                        onDismiss: { viewModel.clearError() }
-                    )
+        ScrollViewReader { scrollProxy in
+            ScrollView {
+                VStack(spacing: Spacing.xl) {
+                    // DEBUG: Success diagnostics banner
+                    #if DEBUG
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("DEBUG: Wallet Loaded ✅ (using WalletStore)")
+                            .font(AppFonts.caption)
+                            .foregroundColor(.green)
+                        Text("balance: \(walletStore.formattedBalance) | tx: \(walletStore.transactions.count) | persisted: ✅")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.green)
+                    }
+                    .padding(Spacing.sm)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.green.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: CornerRadii.sm))
                     .padding(.horizontal, Spacing.lg)
+                    #endif
+                    
+                    // Error Banner
+                    if let error = viewModel.errorMessage {
+                        InlineErrorBanner(
+                            message: error,
+                            type: .error,
+                            onDismiss: { viewModel.clearError() }
+                        )
+                        .padding(.horizontal, Spacing.lg)
+                    }
+                    
+                    // Success Banner
+                    if let success = viewModel.topUpSuccessMessage {
+                        InlineErrorBanner(
+                            message: success,
+                            type: .success,
+                            onDismiss: { viewModel.clearSuccess() }
+                        )
+                        .padding(.horizontal, Spacing.lg)
+                    }
+                    
+                    // Balance Card
+                    balanceCard
+                    
+                    // Quick Actions (pass scrollProxy for History)
+                    quickActions(scrollProxy: scrollProxy)
+                    
+                    // Transactions List
+                    transactionsSection
+                        .id("transactions_section") // Anchor for History scroll
                 }
-                
-                // Success Banner
-                if let success = viewModel.topUpSuccessMessage {
-                    InlineErrorBanner(
-                        message: success,
-                        type: .success,
-                        onDismiss: { viewModel.clearSuccess() }
-                    )
-                    .padding(.horizontal, Spacing.lg)
-                }
-                
-                // Balance Card
-                balanceCard
-                
-                // Quick Actions
-                quickActions
-                
-                // Transactions List
-                transactionsSection
+                .padding(.vertical, Spacing.lg)
             }
-            .padding(.vertical, Spacing.lg)
         }
     }
     
@@ -343,7 +350,7 @@ struct WalletFullView: View {
     
     // MARK: - Quick Actions
     
-    private var quickActions: some View {
+    private func quickActions(scrollProxy: ScrollViewProxy) -> some View {
         HStack(spacing: Spacing.md) {
             QuickActionButton(
                 icon: "plus.circle.fill",
@@ -360,7 +367,14 @@ struct WalletFullView: View {
                 color: .blue
             ) {
                 DemoTapLogger.log("Wallet.QuickAction.History")
-                // Already showing history below
+                // Scroll to transactions section
+                if reduceMotion {
+                    scrollProxy.scrollTo("transactions_section", anchor: .top)
+                } else {
+                    withAnimation(.easeInOut(duration: 0.4)) {
+                        scrollProxy.scrollTo("transactions_section", anchor: .top)
+                    }
+                }
             }
             
             QuickActionButton(
@@ -368,7 +382,8 @@ struct WalletFullView: View {
                 label: "Send",
                 color: .orange
             ) {
-                DemoTapLogger.logNoOp("Wallet.QuickAction.Send")
+                DemoTapLogger.log("Wallet.QuickAction.Send")
+                showSendSheet = true
             }
         }
         .padding(.horizontal, Spacing.lg)

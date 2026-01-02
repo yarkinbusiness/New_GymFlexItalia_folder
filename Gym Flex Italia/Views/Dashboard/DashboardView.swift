@@ -18,6 +18,7 @@ struct DashboardView: View {
     @EnvironmentObject var router: AppRouter
     @EnvironmentObject var locationService: LocationService
     @Environment(\.appContainer) var appContainer
+    @Environment(\.scenePhase) private var scenePhase
     
     @Environment(\.gfTheme) private var theme
     
@@ -62,6 +63,7 @@ struct DashboardView: View {
             }
             .refreshable {
                 viewModel.load()
+                locationService.startIfAuthorized()
                 viewModel.refreshNearbyGyms(userLocation: locationService.currentLocation)
             }
             
@@ -71,10 +73,22 @@ struct DashboardView: View {
         }
         .task {
             viewModel.load()
+            // Try to start location if already authorized (first-time or returning user)
+            locationService.startIfAuthorized()
             viewModel.refreshNearbyGyms(userLocation: locationService.currentLocation)
         }
         .onChange(of: locationService.currentLocation) { _, newLocation in
             viewModel.refreshNearbyGyms(userLocation: newLocation)
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            // When app returns from Settings, refresh location permission
+            if newPhase == .active {
+                #if DEBUG
+                print("📍 DashboardView: App became active, refreshing location...")
+                #endif
+                locationService.startIfAuthorized()
+                viewModel.refreshNearbyGyms(userLocation: locationService.currentLocation)
+            }
         }
         .alert("Booking Error", isPresented: Binding(
             get: { viewModel.errorMessage != nil },
@@ -322,9 +336,12 @@ struct DashboardView: View {
     private var locationButtonLabel: String {
         switch locationService.authorizationStatus {
         case .denied, .restricted:
-            return "Settings"
+            return "Open Settings"
+        case .notDetermined:
+            return "Enable Location"
         default:
-            return "Enable"
+            // Banner hidden when authorized; empty fallback for safety
+            return ""
         }
     }
     
@@ -365,18 +382,21 @@ struct DashboardView: View {
                 
                 Button("See All") {
                     DemoTapLogger.log("Dashboard.SeeAllActivity")
-                    router.switchToTab(.profile)
+                    router.pushBookingHistory()
                 }
                 .font(AppFonts.bodySmall)
                 .foregroundColor(AppColors.brand)
             }
             
-            let completedBookings = viewModel.completedBookings()
+            let activityItems = viewModel.recentActivityItems()
             
             VStack(spacing: Spacing.sm) {
-                if !completedBookings.isEmpty {
-                    ForEach(completedBookings.prefix(3)) { booking in
-                        RecentActivityCard(booking: booking)
+                if !activityItems.isEmpty {
+                    ForEach(activityItems) { item in
+                        RecentActivityCard(
+                            booking: item.booking,
+                            isOngoing: item.isOngoing
+                        )
                     }
                 } else {
                     // Empty state
@@ -393,9 +413,10 @@ struct DashboardView: View {
                 .font(.system(size: 32))
                 .foregroundColor(AppColors.textDim)
             
-            Text("No activity yet")
+            Text("Your recent activity will appear here.")
                 .font(AppFonts.body)
-                .foregroundColor(Color(.label))
+                .foregroundColor(Color(.secondaryLabel))
+                .multilineTextAlignment(.center)
             
             Button {
                 router.switchToTab(.discover)
@@ -469,13 +490,28 @@ struct NearbyGymCardWithDistance: View {
 // MARK: - Recent Activity Card
 struct RecentActivityCard: View {
     let booking: Booking
+    let isOngoing: Bool
+    
+    init(booking: Booking, isOngoing: Bool = false) {
+        self.booking = booking
+        self.isOngoing = isOngoing
+    }
     
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text(booking.gymName ?? "Gym")
-                    .font(AppFonts.h5)
-                    .foregroundColor(Color(.label))
+                HStack(spacing: 6) {
+                    Text(booking.gymName ?? "Gym")
+                        .font(isOngoing ? AppFonts.h5.weight(.bold) : AppFonts.h5)
+                        .foregroundColor(Color(.label))
+                    
+                    // Ongoing indicator dot
+                    if isOngoing {
+                        Circle()
+                            .fill(AppColors.success)
+                            .frame(width: 6, height: 6)
+                    }
+                }
                 
                 Text(formattedDate)
                     .font(AppFonts.bodySmall)
@@ -493,12 +529,19 @@ struct RecentActivityCard: View {
             }
         }
         .padding(Spacing.md)
-        .background(Color(.secondarySystemBackground))
+        .background(isOngoing ? AppColors.success.opacity(0.08) : Color(.secondarySystemBackground))
         .cornerRadius(CornerRadii.md)
+        .overlay(
+            RoundedRectangle(cornerRadius: CornerRadii.md)
+                .stroke(isOngoing ? AppColors.success.opacity(0.3) : Color.clear, lineWidth: 1)
+        )
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
     }
     
     private var formattedDate: String {
+        if isOngoing {
+            return "Now"
+        }
         let calendar = Calendar.current
         if calendar.isDateInToday(booking.startTime) {
             return "Today"
@@ -519,8 +562,9 @@ struct RecentActivityCard: View {
     }
     
     private var statusBadge: some View {
-        Text(booking.status.displayName)
+        Text(isOngoing ? "Ongoing" : booking.status.displayName)
             .font(AppFonts.caption)
+            .fontWeight(isOngoing ? .semibold : .regular)
             .foregroundColor(statusColor)
             .padding(.horizontal, Spacing.sm)
             .padding(.vertical, 4)
@@ -531,6 +575,9 @@ struct RecentActivityCard: View {
     }
     
     private var statusColor: Color {
+        if isOngoing {
+            return AppColors.success
+        }
         switch booking.status {
         case .completed:
             return AppColors.success

@@ -23,7 +23,7 @@ final class ProfileViewModel: ObservableObject {
     @Published var walletBalanceCents: Int?
     
     /// Booking statistics from MockBookingStore (canonical source)
-    @Published var upcomingCount: Int = 0
+    @Published var activeCount: Int = 0
     @Published var pastCount: Int = 0
     @Published var lastBookingSummary: String?
     
@@ -106,10 +106,8 @@ final class ProfileViewModel: ObservableObject {
         // Only count USER bookings (not seeded demo data)
         let userBookings = store.userBookings()
         
-        // Upcoming: endTime > now AND not cancelled
-        upcomingCount = userBookings.filter { booking in
-            booking.status != .cancelled && booking.endTime > now
-        }.count
+        // Active: current session if exists (0 or 1)
+        activeCount = (store.currentUserSession() != nil) ? 1 : 0
         
         // Past: endTime <= now OR status is completed/cancelled
         pastCount = userBookings.filter { booking in
@@ -127,7 +125,7 @@ final class ProfileViewModel: ObservableObject {
         }
         
         #if DEBUG
-        print("👤 ProfileViewModel.loadBookingStatistics: upcoming=\(upcomingCount), past=\(pastCount)")
+        print("👤 ProfileViewModel.loadBookingStatistics: active=\(activeCount), past=\(pastCount)")
         #endif
     }
     
@@ -141,7 +139,7 @@ final class ProfileViewModel: ObservableObject {
     
     /// Whether user has any bookings
     var hasBookings: Bool {
-        upcomingCount > 0 || pastCount > 0
+        activeCount > 0 || pastCount > 0
     }
     
     // MARK: - Legacy Methods (for sections still using them)

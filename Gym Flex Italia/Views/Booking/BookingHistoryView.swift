@@ -2,22 +2,18 @@
 //  BookingHistoryView.swift
 //  Gym Flex Italia
 //
-//  Booking history view with upcoming and past bookings
+//  Booking history view showing past/completed bookings
 //
 
 import SwiftUI
 
-/// Booking history view with segmented control for Upcoming/Past
+/// Booking history view showing past bookings only
 struct BookingHistoryView: View {
     
     @Environment(\.appContainer) private var appContainer
     @EnvironmentObject var router: AppRouter
     
     @StateObject private var viewModel = BookingHistoryViewModel()
-    
-    @State private var selectedSegment = 0
-    
-    private let segments = ["Upcoming", "Past"]
     
     var body: some View {
         ZStack {
@@ -26,16 +22,6 @@ struct BookingHistoryView: View {
                 .ignoresSafeArea()
             
             VStack(spacing: 0) {
-                // Segmented Control
-                Picker("Bookings", selection: $selectedSegment) {
-                    ForEach(0..<segments.count, id: \.self) { index in
-                        Text(segments[index]).tag(index)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, Spacing.lg)
-                .padding(.vertical, Spacing.md)
-                
                 // Content
                 if viewModel.isLoading {
                     loadingView
@@ -44,7 +30,7 @@ struct BookingHistoryView: View {
                 }
             }
         }
-        .navigationTitle("My Bookings")
+        .navigationTitle("Booking History")
         .navigationBarTitleDisplayMode(.large)
         .task {
             DemoTapLogger.log("BookingHistory.Open")
@@ -94,51 +80,19 @@ struct BookingHistoryView: View {
                 .padding(.bottom, Spacing.sm)
             }
             
-            // Bookings List
-            if selectedSegment == 0 {
-                upcomingList
-            } else {
-                pastList
-            }
+            // Past Bookings List
+            historyList
         }
     }
     
-    // MARK: - Upcoming List
+    // MARK: - History List (Past Bookings)
     
-    private var upcomingList: some View {
-        Group {
-            if viewModel.hasUpcoming {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: GFSpacing.sm) {
-                        GFSectionHeader("Upcoming")
-                            .padding(.horizontal, GFSpacing.lg)
-                        
-                        LazyVStack(spacing: GFSpacing.md) {
-                            ForEach(viewModel.upcomingBookings) { booking in
-                                BookingCard(booking: booking) {
-                                    DemoTapLogger.log("BookingHistory.SelectBooking", context: "id: \(booking.id)")
-                                    router.pushBookingDetail(bookingId: booking.id)
-                                }
-                            }
-                        }
-                        .padding(.horizontal, GFSpacing.lg)
-                        .padding(.bottom, 100)
-                    }
-                }
-            } else {
-                emptyUpcomingView
-            }
-        }
-    }
-    
-    // MARK: - Past List
-    
-    private var pastList: some View {
+    private var historyList: some View {
         Group {
             if viewModel.hasPast {
                 ScrollView {
                     VStack(alignment: .leading, spacing: GFSpacing.sm) {
-                        GFSectionHeader("Past")
+                        GFSectionHeader("Past Sessions")
                             .padding(.horizontal, GFSpacing.lg)
                         
                         LazyVStack(spacing: GFSpacing.md) {
@@ -154,24 +108,24 @@ struct BookingHistoryView: View {
                     }
                 }
             } else {
-                emptyPastView
+                emptyHistoryView
             }
         }
     }
     
-    // MARK: - Empty States
+    // MARK: - Empty State
     
-    private var emptyUpcomingView: some View {
+    private var emptyHistoryView: some View {
         VStack(spacing: Spacing.lg) {
-            Image(systemName: "calendar.badge.plus")
+            Image(systemName: "clock.arrow.circlepath")
                 .font(.system(size: 60))
                 .foregroundColor(.secondary)
             
-            Text("No Upcoming Bookings")
+            Text("No Past Bookings")
                 .font(AppFonts.h4)
                 .foregroundColor(.primary)
             
-            Text("Book a gym session to get started!")
+            Text("Your completed gym sessions will appear here")
                 .font(AppFonts.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -188,25 +142,6 @@ struct BookingHistoryView: View {
                     .background(AppGradients.primary)
                     .clipShape(RoundedRectangle(cornerRadius: CornerRadii.md))
             }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(Spacing.xl)
-    }
-    
-    private var emptyPastView: some View {
-        VStack(spacing: Spacing.lg) {
-            Image(systemName: "clock.arrow.circlepath")
-                .font(.system(size: 60))
-                .foregroundColor(.secondary)
-            
-            Text("No Past Bookings")
-                .font(AppFonts.h4)
-                .foregroundColor(.primary)
-            
-            Text("Your completed bookings will appear here.")
-                .font(AppFonts.body)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(Spacing.xl)

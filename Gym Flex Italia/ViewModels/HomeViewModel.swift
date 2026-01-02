@@ -226,12 +226,48 @@ final class HomeViewModel: ObservableObject {
     
     // MARK: - Recent Activity
     
-    /// Get completed/past bookings for Recent Activity section
-    func completedBookings() -> [Booking] {
+    /// Activity item for Recent Activity section
+    struct RecentActivityItem: Identifiable {
+        let id: String
+        let booking: Booking
+        let isOngoing: Bool
+    }
+    
+    /// Get activity items for Recent Activity section
+    /// - Active session first (if exists) with isOngoing=true
+    /// - Then completed/past bookings (limited to last 4)
+    func recentActivityItems() -> [RecentActivityItem] {
+        var items: [RecentActivityItem] = []
         let now = Date()
-        return recentBookings.filter { booking in
-            // Past bookings (ended) or explicitly completed
-            booking.endTime < now || booking.status == .completed
+        
+        // 1. Active session at top (if exists)
+        if let active = activeBooking {
+            items.append(RecentActivityItem(
+                id: active.id,
+                booking: active,
+                isOngoing: true
+            ))
         }
+        
+        // 2. Completed/past bookings (exclude active session)
+        let completedItems = recentBookings
+            .filter { booking in
+                // Past bookings (ended) or explicitly completed
+                (booking.endTime < now || booking.status == .completed) &&
+                // Exclude active session if it exists
+                booking.id != activeBooking?.id
+            }
+            .sorted { $0.endTime > $1.endTime } // Most recent first
+            .prefix(activeBooking != nil ? 3 : 4) // Show 3 if active, 4 if not
+            .map { RecentActivityItem(id: $0.id, booking: $0, isOngoing: false) }
+        
+        items.append(contentsOf: completedItems)
+        
+        return items
+    }
+    
+    /// Whether there are any activity items to show
+    var hasRecentActivity: Bool {
+        !recentActivityItems().isEmpty
     }
 }

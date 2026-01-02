@@ -376,13 +376,13 @@ struct ProfileView: View {
             
             // Stats Row
             HStack(spacing: Spacing.lg) {
-                // Upcoming
+                // Active (0 or 1)
                 VStack(spacing: 4) {
-                    Text("\(viewModel.upcomingCount)")
+                    Text("\(viewModel.activeCount)")
                         .font(AppFonts.h2)
-                        .foregroundColor(AppColors.brand)
+                        .foregroundColor(viewModel.activeCount > 0 ? AppColors.success : AppColors.brand)
                     
-                    Text("Upcoming")
+                    Text("Active")
                         .font(AppFonts.caption)
                         .foregroundColor(Color(.secondaryLabel))
                 }

@@ -30,13 +30,47 @@ final class LocationService: NSObject, ObservableObject {
     }
     
     // MARK: - Authorization
+    
+    /// Refresh the authorization status from the location manager
+    @MainActor
+    func refreshAuthorizationStatus() {
+        authorizationStatus = locationManager.authorizationStatus
+        
+        #if DEBUG
+        print("📍 LocationService.refreshAuthorizationStatus -> \(authorizationStatusName)")
+        #endif
+    }
+    
+    /// Request location permission (shows iOS prompt if notDetermined)
+    @MainActor
     func requestLocationPermission() {
+        #if DEBUG
+        print("📍 LocationService.requestLocationPermission called")
+        #endif
         locationManager.requestWhenInUseAuthorization()
     }
     
+    /// Check if location is authorized
+    var isAuthorized: Bool {
+        authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways
+    }
+    
+    /// Human-readable authorization status name (for debugging)
+    private var authorizationStatusName: String {
+        switch authorizationStatus {
+        case .notDetermined: return "notDetermined"
+        case .restricted: return "restricted"
+        case .denied: return "denied"
+        case .authorizedAlways: return "authorizedAlways"
+        case .authorizedWhenInUse: return "authorizedWhenInUse"
+        @unknown default: return "unknown(\(authorizationStatus.rawValue))"
+        }
+    }
+    
     // MARK: - Location Updates
+    
     func startUpdatingLocation() {
-        guard authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways else {
+        guard isAuthorized else {
             error = .notAuthorized
             return
         }
@@ -48,7 +82,7 @@ final class LocationService: NSObject, ObservableObject {
     }
     
     func requestOneTimeLocation() {
-        guard authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways else {
+        guard isAuthorized else {
             error = .notAuthorized
             return
         }
@@ -58,17 +92,47 @@ final class LocationService: NSObject, ObservableObject {
     // MARK: - Smart Enable Handler
     
     /// Handles the "Enable" location button tap based on current permission state
+    @MainActor
     func handleEnableLocationTapped() {
+        // Always refresh status first to ensure we have the latest
+        refreshAuthorizationStatus()
+        
+        #if DEBUG
+        print("📍 LocationService.enableTap status=\(authorizationStatusName)")
+        #endif
+        
         switch authorizationStatus {
         case .notDetermined:
+            // Show iOS permission prompt
             requestLocationPermission()
+            
         case .denied, .restricted:
+            // Open iOS Settings for this app
             openSystemSettings()
+            
         case .authorizedAlways, .authorizedWhenInUse:
+            // Already authorized - fetch location immediately
             startUpdatingLocation()
             requestOneTimeLocation()
+            
         @unknown default:
             requestLocationPermission()
+        }
+    }
+    
+    /// Start location updates if already authorized (safe to call repeatedly)
+    /// Use this when returning from Settings or on app foreground
+    @MainActor
+    func startIfAuthorized() {
+        refreshAuthorizationStatus()
+        
+        #if DEBUG
+        print("📍 LocationService.startIfAuthorized status=\(authorizationStatusName)")
+        #endif
+        
+        if isAuthorized {
+            startUpdatingLocation()
+            requestOneTimeLocation()
         }
     }
     
@@ -81,12 +145,15 @@ final class LocationService: NSObject, ObservableObject {
         
         if UIApplication.shared.canOpenURL(url) {
             UIApplication.shared.open(url) { success in
+                #if DEBUG
                 print("📍 LocationService: Opened settings = \(success)")
+                #endif
             }
         }
     }
     
     // MARK: - Utility Methods
+    
     func distance(from coordinate: CLLocationCoordinate2D) -> CLLocationDistance? {
         guard let current = currentLocation else { return nil }
         let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
@@ -110,6 +177,10 @@ extension LocationService: CLLocationManagerDelegate {
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         authorizationStatus = manager.authorizationStatus
         
+        #if DEBUG
+        print("📍 LocationService.didChangeAuthorization -> \(authorizationStatusName)")
+        #endif
+        
         switch authorizationStatus {
         case .authorizedWhenInUse, .authorizedAlways:
             error = nil
@@ -127,9 +198,17 @@ extension LocationService: CLLocationManagerDelegate {
         guard let location = locations.last else { return }
         currentLocation = location
         error = nil
+        
+        #if DEBUG
+        print("📍 LocationService.didUpdateLocations -> \(location.coordinate.latitude),\(location.coordinate.longitude)")
+        #endif
     }
     
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        #if DEBUG
+        print("📍 LocationService.didFailWithError: \(error.localizedDescription)")
+        #endif
+        
         if let clError = error as? CLError {
             switch clError.code {
             case .denied:
@@ -160,4 +239,3 @@ enum LocationError: LocalizedError {
         }
     }
 }
-

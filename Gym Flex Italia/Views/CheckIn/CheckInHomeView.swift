@@ -20,9 +20,6 @@ struct CheckInHomeView: View {
     /// The current user session (from shared store logic)
     @State private var currentSession: Booking?
     
-    /// Additional upcoming user bookings (excluding current session)
-    @State private var upcomingUserBookings: [Booking] = []
-    
     /// Loading state
     @State private var isLoading = false
     
@@ -78,11 +75,6 @@ struct CheckInHomeView: View {
                         } else {
                             emptyStateView
                         }
-                        
-                        // Additional Upcoming User Bookings
-                        if !upcomingUserBookings.isEmpty {
-                            upcomingBookingsSection
-                        }
                     }
                     .padding(Spacing.lg)
                     .padding(.bottom, 100) // Space for tab bar
@@ -127,15 +119,7 @@ struct CheckInHomeView: View {
         // IMPORTANT: Use the SAME shared selection logic as HomeViewModel
         currentSession = MockBookingStore.shared.currentUserSession()
         
-        // Get additional upcoming user bookings (excluding the current session)
-        let allUpcoming = MockBookingStore.shared.upcomingUserBookings()
-        if let current = currentSession {
-            upcomingUserBookings = allUpcoming.filter { $0.id != current.id }
-        } else {
-            upcomingUserBookings = allUpcoming
-        }
-        
-        print("✅ CheckInHomeView: currentSession=\(currentSession?.id ?? "nil"), upcomingUserBookings=\(upcomingUserBookings.count)")
+        print("✅ CheckInHomeView: currentSession=\(currentSession?.id ?? "nil")")
     }
     
     // MARK: - Debug Banner
@@ -238,7 +222,12 @@ struct CheckInHomeView: View {
     // MARK: - Extend Time Section
     
     private func extendTimeSection(_ booking: Booking) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
+        // Calculate dynamic pricing based on gym's hourly rate
+        let cost30 = extensionCostCents(pricePerHour: booking.pricePerHour, minutes: 30)
+        let cost60 = extensionCostCents(pricePerHour: booking.pricePerHour, minutes: 60)
+        let cost90 = extensionCostCents(pricePerHour: booking.pricePerHour, minutes: 90)
+        
+        return VStack(alignment: .leading, spacing: Spacing.sm) {
             Text("Extend Time")
                 .font(AppFonts.h5)
                 .foregroundColor(.primary)
@@ -246,26 +235,26 @@ struct CheckInHomeView: View {
             HStack(spacing: Spacing.sm) {
                 ExtendTimeButton(
                     minutes: 30,
-                    price: "€1",
+                    price: extensionPriceLabel(costCents: cost30),
                     isDisabled: isExtending
                 ) {
-                    await handleExtend(booking: booking, minutes: 30, costCents: 100)
+                    await handleExtend(booking: booking, minutes: 30, costCents: cost30)
                 }
                 
                 ExtendTimeButton(
                     minutes: 60,
-                    price: "€2",
+                    price: extensionPriceLabel(costCents: cost60),
                     isDisabled: isExtending
                 ) {
-                    await handleExtend(booking: booking, minutes: 60, costCents: 200)
+                    await handleExtend(booking: booking, minutes: 60, costCents: cost60)
                 }
                 
                 ExtendTimeButton(
                     minutes: 90,
-                    price: "€3",
+                    price: extensionPriceLabel(costCents: cost90),
                     isDisabled: isExtending
                 ) {
-                    await handleExtend(booking: booking, minutes: 90, costCents: 300)
+                    await handleExtend(booking: booking, minutes: 90, costCents: cost90)
                 }
             }
             
@@ -286,6 +275,29 @@ struct CheckInHomeView: View {
         .clipShape(RoundedRectangle(cornerRadius: CornerRadii.lg))
     }
     
+    // MARK: - Dynamic Pricing Helpers
+    
+    /// Calculate extension cost in cents based on gym's hourly rate
+    /// - Parameters:
+    ///   - pricePerHour: Gym's price per hour (e.g., 10.0 for €10/hour)
+    ///   - minutes: Extension duration in minutes
+    /// - Returns: Cost in cents (e.g., 500 for €5.00)
+    private func extensionCostCents(pricePerHour: Double, minutes: Int) -> Int {
+        // Convert hourly price to cents
+        let baseHourCents = Int((pricePerHour * 100.0).rounded())
+        
+        // Calculate proportional cost: (hourly rate) × (minutes / 60)
+        let rawCost = (Double(baseHourCents) * Double(minutes) / 60.0)
+        return Int(rawCost.rounded())
+    }
+    
+    /// Format cost in cents as a Euro price string
+    /// - Parameter costCents: Cost in cents
+    /// - Returns: Formatted price string (e.g., "€5.00")
+    private func extensionPriceLabel(costCents: Int) -> String {
+        return "€" + String(format: "%.2f", Double(costCents) / 100.0)
+    }
+    
     /// Handle extend time button tap
     private func handleExtend(booking: Booking, minutes: Int, costCents: Int) async {
         guard !isExtending else { return }
@@ -294,7 +306,7 @@ struct CheckInHomeView: View {
         errorMessage = nil
         successMessage = nil
         
-        DemoTapLogger.log("CheckIn.Extend.\(minutes)min")
+        DemoTapLogger.log("CheckIn.Extend.\(minutes)min", context: "cost: \(costCents) cents")
         
         do {
             // Check wallet balance
@@ -303,10 +315,13 @@ struct CheckInHomeView: View {
                 throw BookingExtensionError.insufficientFunds
             }
             
-            // Debit wallet (use extension as booking ref suffix)
+            // Create unique extension reference (supports multiple extensions)
+            let extRef = "\(booking.id)-ext-\(minutes)-\(Int(Date().timeIntervalSince1970))"
+            
+            // Debit wallet
             try walletStore.applyDebitForBooking(
                 amountCents: costCents,
-                bookingRef: "\(booking.id)-ext",
+                bookingRef: extRef,
                 gymName: booking.gymName ?? "Gym",
                 gymId: booking.gymId
             )
@@ -322,7 +337,7 @@ struct CheckInHomeView: View {
             
             successMessage = "+\(minutes) minutes added! New end time: \(updatedBooking.endTime.formatted(date: .omitted, time: .shortened))"
             
-            print("✅ CheckInHomeView: Extended booking by \(minutes)min, new duration=\(updatedBooking.duration)")
+            print("✅ CheckInHomeView: Extended booking by \(minutes)min, cost=\(costCents)¢, new duration=\(updatedBooking.duration)")
             
         } catch {
             errorMessage = error.localizedDescription
@@ -517,59 +532,6 @@ struct CheckInHomeView: View {
         .padding(.vertical, Spacing.xs)
         .background((isEnded ? Color.gray : AppColors.success).opacity(0.15))
         .clipShape(Capsule())
-    }
-    
-    // MARK: - Upcoming Bookings Section
-    
-    private var upcomingBookingsSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.md) {
-            Text("Upcoming")
-                .font(AppFonts.h5)
-                .foregroundColor(.primary)
-            
-            ForEach(upcomingUserBookings) { booking in
-                upcomingBookingRow(booking)
-            }
-        }
-    }
-    
-    private func upcomingBookingRow(_ booking: Booking) -> some View {
-        Button {
-            DemoTapLogger.log("CheckInHome.ViewBooking")
-            router.pushBookingDetail(bookingId: booking.id)
-        } label: {
-            HStack(spacing: Spacing.md) {
-                // Gym Icon
-                Image(systemName: "dumbbell.fill")
-                    .font(.system(size: 20))
-                    .foregroundColor(AppColors.brand)
-                    .frame(width: 44, height: 44)
-                    .background(AppColors.brand.opacity(0.15))
-                    .clipShape(Circle())
-                
-                // Details
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(booking.gymName ?? "Gym")
-                        .font(AppFonts.body)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
-                    
-                    Text("\(booking.startTime.formatted(date: .abbreviated, time: .shortened)) • \(booking.formattedDuration)")
-                        .font(AppFonts.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-                
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14))
-                    .foregroundColor(.secondary)
-            }
-            .padding(Spacing.md)
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: CornerRadii.md))
-        }
-        .buttonStyle(PlainButtonStyle())
     }
     
     // MARK: - Empty State

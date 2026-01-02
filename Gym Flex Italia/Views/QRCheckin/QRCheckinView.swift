@@ -9,6 +9,7 @@ import SwiftUI
 import CoreImage.CIFilterBuiltins
 
 /// QR check-in view showing full active session details
+/// Signature moment: QR is the hero, calm and secure
 struct QRCheckinView: View {
     
     let bookingId: String
@@ -16,6 +17,7 @@ struct QRCheckinView: View {
     @State private var showSessionSummary = false
     @State private var isLoading = true
     @Environment(\.appContainer) var appContainer
+    @Environment(\.gfTheme) private var theme
     
     // Initialize with a booking ID (optional) or fetch active
     init(bookingId: String = "") {
@@ -37,17 +39,17 @@ struct QRCheckinView: View {
                     // Finished session state
                     finishedSessionView(booking: booking)
                 } else {
-                    // Active session state
+                    // Active session state - QR is the hero
                     ScrollView {
-                        VStack(spacing: Spacing.xl) {
-                            // Status Badge & Timer
+                        VStack(spacing: GFSpacing.xl) {
+                            // Main QR Code Display (HERO - first and largest)
+                            mainQRCodeSection(booking: booking)
+                            
+                            // Status Badge & Timer (secondary)
                             statusSection
                             
-                            // Gym Information
+                            // Gym Information (tertiary)
                             gymInfoSection(booking: booking)
-                            
-                            // Main QR Code Display
-                            mainQRCodeSection(booking: booking)
                             
                             // Session Details
                             sessionDetailsSection(booking: booking)
@@ -55,13 +57,11 @@ struct QRCheckinView: View {
                             // Extension Options
                             extensionOptionsSection(booking: booking)
                             
-                            // Need Assistance
-                            assistanceButton
-                            
-                            // Important Note
-                            importantNoteSection
+                            // Instructions (smallest, calmest)
+                            instructionsSection
                         }
-                        .padding(Spacing.lg)
+                        .padding(.horizontal, GFSpacing.lg)
+                        .padding(.top, GFSpacing.xl)
                         .padding(.bottom, 100) // Space for tab bar
                     }
                     .refreshable {
@@ -323,40 +323,71 @@ struct QRCheckinView: View {
         .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 5)
     }
     
-    // MARK: - Main QR Code Section
+    // MARK: - Main QR Code Section (HERO)
     private func mainQRCodeSection(booking: Booking) -> some View {
-        VStack(spacing: Spacing.lg) {
+        VStack(spacing: GFSpacing.xl) {
+            // QR Code with premium container
             if let qrCode = booking.qrCodeData,
                let qrImage = generateQRCode(from: qrCode) {
-                Image(uiImage: qrImage)
-                    .interpolation(.none)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 250, height: 250)
-                    .padding(Spacing.lg)
-                    .background(Color.white)
-                    .clipShape(RoundedRectangle(cornerRadius: CornerRadii.xl))
-                    .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 10)
+                VStack(spacing: GFSpacing.lg) {
+                    // QR Code
+                    Image(uiImage: qrImage)
+                        .interpolation(.none)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 220, height: 220)
+                        .padding(GFSpacing.xl)
+                        .background(Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: GFCorners.card))
+                    
+                    // Scan instruction (subtle)
+                    Text("Show this code at the gym entrance")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(theme.colors.textSecondary)
+                }
             }
             
-            VStack(spacing: Spacing.xs) {
+            // Session ID (small, tertiary)
+            HStack(spacing: GFSpacing.sm) {
                 Text("Session ID")
-                    .font(AppFonts.caption)
-                    .foregroundColor(Color(.secondaryLabel))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(theme.colors.textTertiary)
                     .textCase(.uppercase)
-                    .tracking(1)
+                    .tracking(0.5)
                 
                 Text(String(booking.id.suffix(8)))
-                    .font(AppFonts.h5)
-                    .foregroundColor(Color(.label))
-                    .monospaced()
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundColor(theme.colors.textSecondary)
             }
         }
-        .padding(Spacing.xl)
+        .padding(.vertical, GFSpacing.xxl)
+        .padding(.horizontal, GFSpacing.xl)
         .frame(maxWidth: .infinity)
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(CornerRadii.xl)
-        .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 5)
+        .background(theme.colors.surface)
+        .clipShape(RoundedRectangle(cornerRadius: GFCorners.card + 4))
+        .overlay(
+            RoundedRectangle(cornerRadius: GFCorners.card + 4)
+                .stroke(theme.colors.border, lineWidth: 1)
+        )
+        .gfPremiumShadow()
+    }
+    
+    // MARK: - Instructions Section (tertiary, calm)
+    private var instructionsSection: some View {
+        VStack(spacing: GFSpacing.sm) {
+            Text("Need help?")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(theme.colors.textSecondary)
+            
+            Button {
+                DemoTapLogger.log("QRCheckin.Assistance")
+            } label: {
+                Text("Contact Support")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(theme.colors.primary)
+            }
+        }
+        .padding(.vertical, GFSpacing.lg)
     }
     
     // MARK: - Session Details Section
