@@ -8,6 +8,7 @@
 import Foundation
 import CoreLocation
 import Combine
+import UIKit
 
 /// Location service for user location tracking
 final class LocationService: NSObject, ObservableObject {
@@ -52,6 +53,37 @@ final class LocationService: NSObject, ObservableObject {
             return
         }
         locationManager.requestLocation()
+    }
+    
+    // MARK: - Smart Enable Handler
+    
+    /// Handles the "Enable" location button tap based on current permission state
+    func handleEnableLocationTapped() {
+        switch authorizationStatus {
+        case .notDetermined:
+            requestLocationPermission()
+        case .denied, .restricted:
+            openSystemSettings()
+        case .authorizedAlways, .authorizedWhenInUse:
+            startUpdatingLocation()
+            requestOneTimeLocation()
+        @unknown default:
+            requestLocationPermission()
+        }
+    }
+    
+    /// Opens iOS Settings for this app
+    private func openSystemSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else {
+            print("⚠️ LocationService: Invalid settings URL")
+            return
+        }
+        
+        if UIApplication.shared.canOpenURL(url) {
+            UIApplication.shared.open(url) { success in
+                print("📍 LocationService: Opened settings = \(success)")
+            }
+        }
     }
     
     // MARK: - Utility Methods

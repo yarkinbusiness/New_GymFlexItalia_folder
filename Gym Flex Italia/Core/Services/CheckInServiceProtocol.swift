@@ -32,6 +32,18 @@ protocol CheckInServiceProtocol {
     /// - Parameter code: The code to validate
     /// - Returns: true if the code format is valid
     func isValidCodeFormat(_ code: String) -> Bool
+    
+    /// Extends an active session
+    /// - Parameters:
+    ///   - bookingId: The booking to extend
+    ///   - additionalMinutes: Minutes to add
+    /// - Returns: Updated booking with extended time
+    func extendSession(bookingId: String, additionalMinutes: Int) async throws -> Booking
+    
+    /// Checks out of an active session
+    /// - Parameter bookingId: The booking to check out
+    /// - Returns: Updated booking with completed status
+    func checkOut(bookingId: String) async throws -> Booking
 }
 
 /// Errors that can occur during check-in operations

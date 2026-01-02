@@ -28,6 +28,13 @@ enum AppRoute: Hashable {
     case devicesSessions
     case deleteAccount
     case notificationsPreferences
+    case helpSupport
+    case faq
+    case reportBug
+    case terms
+    case privacy
+    case editAvatar
+    case updateGoals
 }
 
 /// Central navigation state owner for consistent navigation across the app
@@ -263,9 +270,11 @@ final class AppRouter: ObservableObject {
     }
     
     /// Navigate to the deep link simulator (debug only)
+    #if DEBUG
     func pushDeepLinkSimulator() {
         appendRoute(.deepLinkSimulator)
     }
+    #endif
     
     /// Navigate to payment methods
     func pushPaymentMethods() {
@@ -300,6 +309,41 @@ final class AppRouter: ObservableObject {
     /// Navigate to notifications preferences
     func pushNotificationsPreferences() {
         appendRoute(.notificationsPreferences)
+    }
+    
+    /// Navigate to help & support
+    func pushHelpSupport() {
+        appendRoute(.helpSupport)
+    }
+    
+    /// Navigate to FAQ
+    func pushFAQ() {
+        appendRoute(.faq)
+    }
+    
+    /// Navigate to report bug
+    func pushReportBug() {
+        appendRoute(.reportBug)
+    }
+    
+    /// Navigate to terms of service
+    func pushTerms() {
+        appendRoute(.terms)
+    }
+    
+    /// Navigate to privacy policy
+    func pushPrivacy() {
+        appendRoute(.privacy)
+    }
+    
+    /// Navigate to edit avatar
+    func pushEditAvatar() {
+        appendRoute(.editAvatar)
+    }
+    
+    /// Navigate to update goals
+    func pushUpdateGoals() {
+        appendRoute(.updateGoals)
     }
     
     // MARK: - Stack Synchronization (for back gesture handling)

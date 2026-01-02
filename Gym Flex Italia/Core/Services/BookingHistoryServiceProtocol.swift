@@ -12,6 +12,11 @@ protocol BookingHistoryServiceProtocol {
     /// Fetches all bookings for the current user
     func fetchBookings() async throws -> [Booking]
     
+    /// Fetches a single booking by ID
+    /// - Parameter id: The booking ID
+    /// - Returns: The booking with the given ID
+    func fetchBooking(id: String) async throws -> Booking
+    
     /// Cancels a booking by ID
     /// - Parameter id: The booking ID to cancel
     /// - Returns: The updated booking with cancelled status

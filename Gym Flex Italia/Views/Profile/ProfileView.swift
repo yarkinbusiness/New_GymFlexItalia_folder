@@ -13,13 +13,11 @@ struct ProfileView: View {
     
     @StateObject private var viewModel = ProfileViewModel()
     @EnvironmentObject var appearanceManager: AppearanceManager
+    @EnvironmentObject var settingsStore: SettingsStore
     @EnvironmentObject var router: AppRouter
     @Environment(\.appContainer) var appContainer
     
-    // State for button action feedback
-    @State private var showEditAvatarSheet = false
-    @State private var showUpdateGoalsSheet = false
-    @State private var showAddPaymentSheet = false
+    // No placeholder sheets - using navigation routes
     
     var body: some View {
         ZStack {
@@ -67,6 +65,9 @@ struct ProfileView: View {
                         
                         // Notifications & Preferences
                         notificationsRow
+                        
+                        // Help & Support
+                        helpSupportRow
                     }
                     .padding(.horizontal, Spacing.md)
                     .padding(.top, Spacing.md)
@@ -80,15 +81,7 @@ struct ProfileView: View {
         .task {
             await viewModel.load(using: appContainer)
         }
-        .sheet(isPresented: $showEditAvatarSheet) {
-            SheetPlaceholderView(title: "Edit Avatar", message: "Avatar customization coming soon!")
-        }
-        .sheet(isPresented: $showUpdateGoalsSheet) {
-            SheetPlaceholderView(title: "Update Goals", message: "Goal setting feature coming soon!")
-        }
-        .sheet(isPresented: $showAddPaymentSheet) {
-            SheetPlaceholderView(title: "Add Payment", message: "Payment methods coming soon!")
-        }
+        // Navigation is handled via AppRouter routes
     }
     
     // MARK: - Loading View
@@ -304,6 +297,47 @@ struct ProfileView: View {
         .buttonStyle(.plain)
     }
     
+    // MARK: - Help & Support Row
+    private var helpSupportRow: some View {
+        Button {
+            DemoTapLogger.log("Profile.HelpSupport")
+            router.pushHelpSupport()
+        } label: {
+            HStack(spacing: Spacing.md) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: CornerRadii.sm)
+                        .fill(AppColors.success.opacity(0.2))
+                        .frame(width: 40, height: 40)
+                    
+                    Image(systemName: "questionmark.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(AppColors.success)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Help & Support")
+                        .font(AppFonts.body)
+                        .foregroundColor(Color(.label))
+                    
+                    Text("FAQ, contact, legal")
+                        .font(AppFonts.caption)
+                        .foregroundColor(Color(.secondaryLabel))
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14))
+                    .foregroundColor(Color(.tertiaryLabel))
+            }
+            .padding(Spacing.lg)
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(CornerRadii.lg)
+            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
+        }
+        .buttonStyle(.plain)
+    }
+    
     // MARK: - Booking Summary Section
     private var bookingSummarySection: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
@@ -423,14 +457,14 @@ struct ProfileView: View {
             
             Button {
                 DemoTapLogger.log("Profile.ToggleAppearance")
-                appearanceManager.toggleAppearance()
+                settingsStore.toggleLightDark()
             } label: {
                 HStack {
-                    Image(systemName: appearanceManager.iconName)
+                    Image(systemName: settingsStore.appearanceIconName)
                         .font(.system(size: 18))
                         .foregroundColor(AppColors.brand)
                     
-                    Text(appearanceManager.displayName)
+                    Text(settingsStore.appearanceDisplayName)
                         .font(AppFonts.body)
                         .foregroundColor(Color(.label))
                     
@@ -476,7 +510,7 @@ struct ProfileView: View {
                 // Edit Badge
                 Button {
                     DemoTapLogger.log("Profile.EditAvatarBadge")
-                    showEditAvatarSheet = true
+                    router.pushEditAvatar()
                 } label: {
                     ZStack {
                         Circle()
@@ -505,7 +539,7 @@ struct ProfileView: View {
             HStack(spacing: Spacing.md) {
                 Button {
                     DemoTapLogger.log("Profile.EditAvatar")
-                    showEditAvatarSheet = true
+                    router.pushEditAvatar()
                 } label: {
                     Text("Edit Avatar")
                         .font(AppFonts.bodySmall)
@@ -518,7 +552,7 @@ struct ProfileView: View {
                 
                 Button {
                     DemoTapLogger.log("Profile.UpdateGoals")
-                    showUpdateGoalsSheet = true
+                    router.pushUpdateGoals()
                 } label: {
                     Text("Update Goals")
                         .font(AppFonts.bodySmall)
@@ -753,5 +787,6 @@ struct SheetPlaceholderView: View {
     ProfileView()
         .environmentObject(AppRouter())
         .environmentObject(AppearanceManager.shared)
+        .environmentObject(SettingsStore())
         .environment(\.appContainer, .demo())
 }

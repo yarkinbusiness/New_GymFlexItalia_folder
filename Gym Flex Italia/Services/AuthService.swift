@@ -275,20 +275,17 @@ final class AuthService: ObservableObject {
         return try decoder.decode(Profile.self, from: data)
     }
     
-    // MARK: - Token Management
+    // MARK: - Token Management (Keychain)
     func getStoredToken() -> String? {
-        return UserDefaults.standard.string(forKey: "auth_token")
-        // TODO: Migrate to Keychain for production
+        return KeychainTokenStore.loadToken()
     }
     
     private func storeToken(_ token: String) {
-        UserDefaults.standard.set(token, forKey: "auth_token")
-        // TODO: Migrate to Keychain for production
+        KeychainTokenStore.saveToken(token)
     }
     
     private func clearStoredToken() {
-        UserDefaults.standard.removeObject(forKey: "auth_token")
-        // TODO: Migrate to Keychain for production
+        KeychainTokenStore.clearToken()
     }
 }
 

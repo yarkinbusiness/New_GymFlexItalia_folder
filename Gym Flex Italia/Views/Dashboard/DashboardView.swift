@@ -305,8 +305,8 @@ struct DashboardView: View {
             
             Spacer()
             
-            Button("Enable") {
-                locationService.requestLocationPermission()
+            Button(locationButtonLabel) {
+                locationService.handleEnableLocationTapped()
             }
             .font(AppFonts.caption)
             .foregroundColor(AppColors.brand)
@@ -314,6 +314,16 @@ struct DashboardView: View {
         .padding(Spacing.sm)
         .background(AppColors.warning.opacity(0.1))
         .cornerRadius(CornerRadii.sm)
+    }
+    
+    /// Dynamic button label based on permission status
+    private var locationButtonLabel: String {
+        switch locationService.authorizationStatus {
+        case .denied, .restricted:
+            return "Settings"
+        default:
+            return "Enable"
+        }
     }
     
     /// Empty state for nearby gyms

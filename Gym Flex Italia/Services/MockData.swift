@@ -4,13 +4,21 @@
 //
 //  Created by Yarkin Yavuz on 11/21/25.
 //
+//  ⚠️ DEPRECATED: Do not use in production code.
+//  Use MockDataStore.shared for gym data.
+//  This file exists only for SwiftUI Previews.
+//
 
 import Foundation
 import CoreLocation
 
+/// Legacy mock data for SwiftUI Previews ONLY.
+/// **DO NOT USE IN PRODUCTION CODE.**
+/// For gym data, use `MockDataStore.shared.gyms` instead.
 struct MockData {
     
-    // MARK: - Sample Gyms
+    // MARK: - Sample Gyms (SwiftUI Preview only)
+    /// ⚠️ DEPRECATED: Use MockDataStore.shared.gyms for production code
     static let sampleGyms: [Gym] = [
         Gym(
             id: "gym_001",

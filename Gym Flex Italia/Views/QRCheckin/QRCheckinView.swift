@@ -15,6 +15,7 @@ struct QRCheckinView: View {
     @StateObject private var viewModel: ActiveSessionViewModel
     @State private var showSessionSummary = false
     @State private var isLoading = true
+    @Environment(\.appContainer) var appContainer
     
     // Initialize with a booking ID (optional) or fetch active
     init(bookingId: String = "") {
@@ -87,6 +88,7 @@ struct QRCheckinView: View {
             }
         }
         .task {
+            viewModel.configure(checkInService: appContainer.checkInService)
             await loadActiveBooking()
         }
     }
@@ -104,14 +106,14 @@ struct QRCheckinView: View {
         
         // PRIORITY 2: If we have a specific booking ID, try to load that
         if !bookingId.isEmpty {
-            if let booking = try? await BookingService.shared.fetchBooking(id: bookingId) {
+            if let booking = try? await appContainer.bookingHistoryService.fetchBooking(id: bookingId) {
                 updateViewModel(with: booking)
                 return
             }
         }
         
         // PRIORITY 3: Find active OR most recent completed booking
-        if let bookings = try? await BookingService.shared.fetchBookings() {
+        if let bookings = try? await appContainer.bookingHistoryService.fetchBookings() {
             // First, look for active
             var targetBooking = bookings.first { $0.status == .checkedIn || $0.status == .confirmed }
             

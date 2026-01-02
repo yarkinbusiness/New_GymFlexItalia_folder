@@ -20,24 +20,11 @@ final class GymDetailViewModel: ObservableObject {
     @Published var showBookingForm = false
     @Published var bookingConfirmation: BookingConfirmation?
     
-    private let gymsService = GymsService.shared
     private let locationService = LocationService.shared
     
     // MARK: - Load Gym
-    func loadGym(gymId: String) async {
-        isLoading = true
-        errorMessage = nil
-        
-        do {
-            gym = try await gymsService.fetchGym(id: gymId)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-        
-        isLoading = false
-    }
     
-    /// Load gym using injected service (preferred for production)
+    /// Load gym using injected service
     func loadGym(gymId: String, using service: GymServiceProtocol) async {
         isLoading = true
         errorMessage = nil
@@ -51,6 +38,8 @@ final class GymDetailViewModel: ObservableObject {
         
         isLoading = false
     }
+    
+
     
     /// Book the current gym using injected service
     func bookGym(date: Date, duration: Int, using service: BookingServiceProtocol) async -> Bool {
@@ -163,15 +152,15 @@ final class GymDetailViewModel: ObservableObject {
         }
     }
     
-    func createBooking(duration: Int) async -> Bool {
+    func createBooking(duration: Int, using service: BookingServiceProtocol) async -> Bool {
         guard let gymId = gym?.id else { return false }
         isLoading = true
         defer { isLoading = false }
         
         do {
-            _ = try await BookingService.shared.createBooking(
+            _ = try await service.createBooking(
                 gymId: gymId,
-                startTime: Date(),
+                date: Date(),
                 duration: duration
             )
             return true

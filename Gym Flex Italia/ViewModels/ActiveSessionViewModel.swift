@@ -20,8 +20,7 @@ class ActiveSessionViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var walletBalance: Double = 0
     
-    private let bookingService = BookingService.shared
-    private let walletService = WalletService.shared
+    private var checkInService: CheckInServiceProtocol?
     private var timer: Timer?
     
     init(booking: Booking? = nil) {
@@ -33,6 +32,11 @@ class ActiveSessionViewModel: ObservableObject {
         Task {
             await loadWalletBalance()
         }
+    }
+    
+    /// Configures the service to use for check-in operations
+    func configure(checkInService: CheckInServiceProtocol) {
+        self.checkInService = checkInService
     }
     
     deinit {
@@ -67,11 +71,8 @@ class ActiveSessionViewModel: ObservableObject {
     
     // MARK: - Wallet Balance
     func loadWalletBalance() async {
-        do {
-            walletBalance = try await walletService.fetchBalance()
-        } catch {
-            print("Failed to load wallet balance: \(error.localizedDescription)")
-        }
+        // Use WalletStore (single source of truth) instead of legacy WalletService
+        walletBalance = WalletStore.shared.balance
     }
     
     // MARK: - Extension Pricing
@@ -83,6 +84,10 @@ class ActiveSessionViewModel: ObservableObject {
     // MARK: - Session Extension
     func extendSession(additionalMinutes: Int) async {
         guard let booking = booking, !isExtending, !isExpired else { return }
+        guard let service = checkInService else {
+            errorMessage = "Check-in service not configured"
+            return
+        }
         
         let cost = extensionPrice(minutes: additionalMinutes)
         
@@ -102,7 +107,7 @@ class ActiveSessionViewModel: ObservableObject {
         isExtending = true
         
         do {
-            let updatedBooking = try await bookingService.extendSession(
+            let updatedBooking = try await service.extendSession(
                 bookingId: booking.id,
                 additionalMinutes: additionalMinutes
             )
@@ -116,16 +121,18 @@ class ActiveSessionViewModel: ObservableObject {
             // Refresh timer and balance
             calculateTimeRemaining()
             await loadWalletBalance()
-        } catch let error as BookingError where error == .insufficientFunds {
-            showInsufficientFunds = true
-            Task {
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
-                await MainActor.run {
-                    showInsufficientFunds = false
-                }
-            }
         } catch {
-            errorMessage = error.localizedDescription
+            if error.localizedDescription.contains("Insufficient") {
+                showInsufficientFunds = true
+                Task {
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    await MainActor.run {
+                        showInsufficientFunds = false
+                    }
+                }
+            } else {
+                errorMessage = error.localizedDescription
+            }
         }
         
         isExtending = false
@@ -151,8 +158,12 @@ class ActiveSessionViewModel: ObservableObject {
     // MARK: - Check Out
     func checkOut() async {
         guard let booking = booking else { return }
+        guard let service = checkInService else {
+            errorMessage = "Check-in service not configured"
+            return
+        }
         do {
-            let updatedBooking = try await bookingService.checkOut(bookingId: booking.id)
+            let updatedBooking = try await service.checkOut(bookingId: booking.id)
             update(booking: updatedBooking)
         } catch {
             errorMessage = error.localizedDescription

@@ -125,5 +125,27 @@ final class QRService {
             return try? decoder.decode(QRCodeData.self, from: data)
         }
     }
+    
+    // MARK: - QRPayload Integration (Owner App Contract)
+    
+    /// Generates a QR code image from a QRPayload
+    /// This is the preferred method for owner app compatibility
+    func generateQRCode(from payload: QRPayload, size: CGSize = CGSize(width: 300, height: 300)) -> UIImage? {
+        guard let qrString = payload.toQRString() else {
+            return nil
+        }
+        return generateQRCode(from: qrString, size: size)
+    }
+    
+    /// Generates a QRPayload from a Booking
+    func generatePayload(from booking: Booking) -> QRPayload {
+        QRPayload.generate(from: booking)
+    }
+    
+    /// Generates a QR code image for a booking using QRPayload format
+    /// This ensures owner app can validate the QR code
+    func generateBookingQRCodeV2(booking: Booking, size: CGSize = CGSize(width: 300, height: 300)) -> UIImage? {
+        let payload = generatePayload(from: booking)
+        return generateQRCode(from: payload, size: size)
+    }
 }
-

@@ -85,7 +85,9 @@ final class HomeViewModel: ObservableObject {
         // Reload to update UI
         load()
         
+        #if DEBUG
         print("🏠 HomeViewModel.cancelActiveSession: Cancelled booking \(booking.id)")
+        #endif
     }
     
     // MARK: - Private State
@@ -116,8 +118,10 @@ final class HomeViewModel: ObservableObject {
         // Last USER booking (for Quick Book display when no active session)
         lastUserBooking = bookingStore.lastUserBooking()
         
+        #if DEBUG
         print("🏠 HomeViewModel.load: \(allBookings.count) total bookings, activeBooking=\(activeBooking?.id ?? "nil"), lastUserBooking=\(lastUserBooking?.id ?? "nil")")
         print("🏠 HomeViewModel.load: showActiveSession=\(showActiveSession), showQuickBook=\(showQuickBook)")
+        #endif
     }
     
     // MARK: - Nearby Gyms
@@ -136,13 +140,17 @@ final class HomeViewModel: ObservableObject {
             }
             nearbyGyms = Array(sorted.prefix(3))
             
+            #if DEBUG
             print("🏠 HomeViewModel.refreshNearbyGyms: \(nearbyGyms.count) nearby gyms (location available)")
+            #endif
         } else {
             // No location - show first 3 gyms from catalog
             nearbyGyms = Array(allGyms.prefix(3))
             locationPermissionGranted = false
             
+            #if DEBUG
             print("🏠 HomeViewModel.refreshNearbyGyms: \(nearbyGyms.count) gyms (no location)")
+            #endif
         }
     }
     

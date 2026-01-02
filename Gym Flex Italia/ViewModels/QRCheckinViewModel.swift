@@ -24,20 +24,37 @@ final class QRCheckinViewModel: ObservableObject {
     @Published var showLevelUp = false
     @Published var newLevel: Int?
     
-    private let bookingService = BookingService.shared
+    private var bookingHistoryService: BookingHistoryServiceProtocol?
+    private var checkInService: CheckInServiceProtocol?
+    private var profileService: ProfileServiceProtocol?
     private let qrService = QRService.shared
-    private let profileService = ProfileService.shared
     private let realtimeService = RealtimeService.shared
     
     private var timer: Timer?
     
+    /// Configures the services to use
+    func configure(
+        bookingHistoryService: BookingHistoryServiceProtocol,
+        checkInService: CheckInServiceProtocol,
+        profileService: ProfileServiceProtocol
+    ) {
+        self.bookingHistoryService = bookingHistoryService
+        self.checkInService = checkInService
+        self.profileService = profileService
+    }
+    
     // MARK: - Load Booking & Generate QR
     func loadBooking(bookingId: String) async {
+        guard let service = bookingHistoryService else {
+            errorMessage = "Services not configured"
+            return
+        }
+        
         isLoading = true
         errorMessage = nil
         
         do {
-            booking = try await bookingService.fetchBooking(id: bookingId)
+            booking = try await service.fetchBooking(id: bookingId)
             
             if let booking = booking, booking.canCheckIn {
                 await generateQRCode()
@@ -55,21 +72,18 @@ final class QRCheckinViewModel: ObservableObject {
     func generateQRCode() async {
         guard let booking = booking else { return }
         
-        do {
-            let qrCodeData = try await bookingService.generateQRCode(bookingId: booking.id)
-            
-            if let image = qrService.generateQRCode(from: qrCodeData) {
-                qrCodeImage = image
-            }
-        } catch {
-            errorMessage = error.localizedDescription
+        // Use existing QR code data from booking
+        if let qrData = booking.qrCodeData,
+           let image = qrService.generateQRCode(from: qrData) {
+            qrCodeImage = image
         }
     }
     
     // MARK: - Check In
     func checkIn() async {
         guard let booking = booking,
-              let qrCode = booking.qrCodeData else {
+              let qrCode = booking.checkinCode,
+              let service = checkInService else {
             errorMessage = "Invalid booking or QR code"
             return
         }
@@ -78,12 +92,12 @@ final class QRCheckinViewModel: ObservableObject {
         errorMessage = nil
         
         do {
-            let updatedBooking = try await bookingService.checkIn(
-                bookingId: booking.id,
-                qrCode: qrCode
+            let result = try await service.checkIn(
+                code: qrCode,
+                bookingId: booking.id
             )
             
-            self.booking = updatedBooking
+            self.booking = result.booking
             isCheckedIn = true
             
             // Record workout for avatar progression
@@ -98,13 +112,14 @@ final class QRCheckinViewModel: ObservableObject {
     
     // MARK: - Check Out
     func checkOut() async {
-        guard let booking = booking else { return }
+        guard let booking = booking,
+              let service = checkInService else { return }
         
         isLoading = true
         errorMessage = nil
         
         do {
-            let updatedBooking = try await bookingService.checkOut(bookingId: booking.id)
+            let updatedBooking = try await service.checkOut(bookingId: booking.id)
             self.booking = updatedBooking
         } catch {
             errorMessage = error.localizedDescription
@@ -115,11 +130,12 @@ final class QRCheckinViewModel: ObservableObject {
     
     // MARK: - Record Workout (Avatar Progression)
     private func recordWorkout() async {
-        guard let booking = booking else { return }
+        guard let booking = booking,
+              let service = profileService else { return }
         
         do {
             let oldLevel = AuthService.shared.currentUser?.avatarLevel ?? 1
-            let updatedProfile = try await profileService.recordWorkout(bookingId: booking.id)
+            let updatedProfile = try await service.recordWorkout(bookingId: booking.id)
             let newLevelValue = updatedProfile.avatarLevel
             
             // Check for level up

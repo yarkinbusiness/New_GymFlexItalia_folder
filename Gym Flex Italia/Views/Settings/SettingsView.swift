@@ -73,10 +73,12 @@ struct SettingsView: View {
             // About Section
             aboutSection
             
-            // Debug Section (Demo mode only)
+            // Debug Section (DEBUG builds only)
+            #if DEBUG
             if FeatureFlags.shared.isDemoMode {
                 debugSection
             }
+            #endif
             
             // Reset Section
             resetSection
@@ -354,6 +356,7 @@ struct SettingsView: View {
     
     // MARK: - Debug Section
     
+    #if DEBUG
     private var debugSection: some View {
         Section {
             Button {
@@ -410,9 +413,10 @@ struct SettingsView: View {
         } header: {
             Text("Debug")
         } footer: {
-            Text("Developer options. Only visible in demo mode.")
+            Text("Developer options. Only visible in DEBUG builds.")
         }
     }
+    #endif
     
     // MARK: - Reset Section
     

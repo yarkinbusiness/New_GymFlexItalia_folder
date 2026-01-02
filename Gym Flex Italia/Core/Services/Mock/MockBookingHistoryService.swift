@@ -26,6 +26,14 @@ final class MockBookingHistoryService: BookingHistoryServiceProtocol {
         return MockBookingStore.shared.allBookings()
     }
     
+    func fetchBooking(id: String) async throws -> Booking {
+        try await simulateNetworkDelay()
+        guard let booking = MockBookingStore.shared.bookingById(id) else {
+            throw BookingHistoryServiceError.bookingNotFound
+        }
+        return booking
+    }
+    
     func cancelBooking(id: String) async throws -> Booking {
         try await simulateNetworkDelay()
         

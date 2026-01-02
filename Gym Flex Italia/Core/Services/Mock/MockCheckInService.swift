@@ -77,6 +77,103 @@ final class MockCheckInService: CheckInServiceProtocol {
         return regex?.firstMatch(in: code, options: [], range: range) != nil
     }
     
+    func extendSession(bookingId: String, additionalMinutes: Int) async throws -> Booking {
+        try await simulateNetworkDelay()
+        
+        // Find the booking
+        guard let booking = MockBookingStore.shared.bookingById(bookingId) else {
+            throw CheckInServiceError.bookingNotFound
+        }
+        
+        // Check wallet balance
+        let cost = (booking.pricePerHour * Double(additionalMinutes)) / 60.0
+        let walletBalance = WalletStore.shared.balance
+        
+        if walletBalance < cost {
+            throw CheckInServiceError.unknown("Insufficient wallet balance")
+        }
+        
+        // Create extended booking
+        let updatedBooking = Booking(
+            id: booking.id,
+            userId: booking.userId,
+            gymId: booking.gymId,
+            gymName: booking.gymName,
+            gymAddress: booking.gymAddress,
+            gymCoverImageURL: booking.gymCoverImageURL,
+            startTime: booking.startTime,
+            endTime: booking.endTime.addingTimeInterval(TimeInterval(additionalMinutes * 60)),
+            duration: booking.duration + additionalMinutes,
+            pricePerHour: booking.pricePerHour,
+            totalPrice: booking.totalPrice + cost,
+            currency: booking.currency,
+            status: booking.status,
+            checkinCode: booking.checkinCode,
+            checkinTime: booking.checkinTime,
+            checkoutTime: nil,
+            qrCodeData: booking.qrCodeData,
+            qrCodeExpiresAt: booking.qrCodeExpiresAt,
+            createdAt: booking.createdAt,
+            updatedAt: Date(),
+            cancelledAt: nil,
+            cancellationReason: nil
+        )
+        
+        // Update in store
+        MockBookingStore.shared.upsert(updatedBooking)
+        
+        // Debit wallet
+        let costCents = Int(cost * 100)
+        try? WalletStore.shared.applyDebitForBooking(
+            amountCents: costCents,
+            bookingRef: "EXT-\(bookingId.suffix(6))",
+            gymName: booking.gymName ?? "Gym",
+            gymId: booking.gymId
+        )
+        
+        return updatedBooking
+    }
+    
+    func checkOut(bookingId: String) async throws -> Booking {
+        try await simulateNetworkDelay()
+        
+        // Find the booking
+        guard let booking = MockBookingStore.shared.bookingById(bookingId) else {
+            throw CheckInServiceError.bookingNotFound
+        }
+        
+        // Mark as completed
+        let updatedBooking = Booking(
+            id: booking.id,
+            userId: booking.userId,
+            gymId: booking.gymId,
+            gymName: booking.gymName,
+            gymAddress: booking.gymAddress,
+            gymCoverImageURL: booking.gymCoverImageURL,
+            startTime: booking.startTime,
+            endTime: booking.endTime,
+            duration: booking.duration,
+            pricePerHour: booking.pricePerHour,
+            totalPrice: booking.totalPrice,
+            currency: booking.currency,
+            status: .completed,
+            checkinCode: booking.checkinCode,
+            checkinTime: booking.checkinTime,
+            checkoutTime: Date(),
+            qrCodeData: nil,
+            qrCodeExpiresAt: nil,
+            createdAt: booking.createdAt,
+            updatedAt: Date(),
+            cancelledAt: nil,
+            cancellationReason: nil
+        )
+        
+        // Update in store
+        MockBookingStore.shared.upsert(updatedBooking)
+        
+        return updatedBooking
+    }
+    
     // MARK: - Helpers
     
     /// Simulates network delay (300-700ms)

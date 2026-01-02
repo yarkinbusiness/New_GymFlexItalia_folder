@@ -40,4 +40,9 @@ protocol ProfileServiceProtocol {
     /// - Parameter profile: The updated profile data
     /// - Returns: The saved profile (may include server-side modifications)
     func updateProfile(_ profile: Profile) async throws -> Profile
+    
+    /// Records a workout for the user (avatar progression)
+    /// - Parameter bookingId: The booking ID of the completed workout
+    /// - Returns: Updated profile with any progression changes
+    func recordWorkout(bookingId: String) async throws -> Profile
 }

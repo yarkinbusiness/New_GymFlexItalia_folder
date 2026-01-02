@@ -47,7 +47,9 @@ final class PaymentMethodsStore: ObservableObject {
     
     private init() {
         load()
+        #if DEBUG
         print("💳 PaymentMethodsStore.init: Loaded \(methods.count) payment methods")
+        #endif
     }
     
     // MARK: - Persistence
@@ -55,15 +57,21 @@ final class PaymentMethodsStore: ObservableObject {
     /// Load payment methods from UserDefaults
     private func load() {
         guard let data = UserDefaults.standard.data(forKey: Self.persistenceKey) else {
+            #if DEBUG
             print("💳 PaymentMethodsStore.load: No persisted data")
+            #endif
             return
         }
         
         do {
             methods = try JSONDecoder().decode([PaymentMethodItem].self, from: data)
+            #if DEBUG
             print("💳 PaymentMethodsStore.load: Loaded \(methods.count) methods")
+            #endif
         } catch {
+            #if DEBUG
             print("⚠️ PaymentMethodsStore.load: Failed to decode: \(error)")
+            #endif
         }
     }
     
@@ -72,9 +80,13 @@ final class PaymentMethodsStore: ObservableObject {
         do {
             let data = try JSONEncoder().encode(methods)
             UserDefaults.standard.set(data, forKey: Self.persistenceKey)
+            #if DEBUG
             print("💳 PaymentMethodsStore.save: Saved \(methods.count) methods")
+            #endif
         } catch {
+            #if DEBUG
             print("⚠️ PaymentMethodsStore.save: Failed to encode: \(error)")
+            #endif
         }
     }
     
@@ -83,13 +95,15 @@ final class PaymentMethodsStore: ObservableObject {
     /// Add or update a payment method
     func upsert(_ item: PaymentMethodItem) {
         if let index = methods.firstIndex(where: { $0.id == item.id }) {
-            // Update existing
             methods[index] = item
+            #if DEBUG
             print("💳 PaymentMethodsStore.upsert: Updated \(item.displayName)")
+            #endif
         } else {
-            // Add new
             methods.append(item)
+            #if DEBUG
             print("💳 PaymentMethodsStore.upsert: Added \(item.displayName)")
+            #endif
         }
         
         // If this is set as default, unset others
@@ -103,12 +117,16 @@ final class PaymentMethodsStore: ObservableObject {
     /// Remove a payment method by ID
     func remove(id: String) {
         guard let index = methods.firstIndex(where: { $0.id == id }) else {
+            #if DEBUG
             print("⚠️ PaymentMethodsStore.remove: Method \(id) not found")
+            #endif
             return
         }
         
         let removed = methods.remove(at: index)
+        #if DEBUG
         print("💳 PaymentMethodsStore.remove: Removed \(removed.displayName)")
+        #endif
         
         // If removed was default and there are remaining cards, set first card as default
         if removed.isDefault && !cards.isEmpty {
@@ -131,7 +149,9 @@ final class PaymentMethodsStore: ObservableObject {
         for i in methods.indices {
             methods[i].isDefault = (methods[i].id == id)
         }
+        #if DEBUG
         print("💳 PaymentMethodsStore.setDefault: Set \(id) as default")
+        #endif
     }
     
     // MARK: - Reset
@@ -140,6 +160,8 @@ final class PaymentMethodsStore: ObservableObject {
     func reset() {
         methods = []
         save()
+        #if DEBUG
         print("💳 PaymentMethodsStore.reset: Cleared all methods")
+        #endif
     }
 }

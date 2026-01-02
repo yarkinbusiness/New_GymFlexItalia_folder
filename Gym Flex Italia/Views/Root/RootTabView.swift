@@ -82,8 +82,10 @@ struct RootTabView: View {
                     TransactionDetailView(transactionId: transactionId)
                 case .checkIn(let bookingId):
                     CheckInView(bookingId: bookingId)
+                #if DEBUG
                 case .deepLinkSimulator:
                     DeepLinkSimulatorView()
+                #endif
                 case .paymentMethods:
                     PaymentMethodsView()
                 case .addCard:
@@ -98,6 +100,20 @@ struct RootTabView: View {
                     DeleteAccountView()
                 case .notificationsPreferences:
                     NotificationsPreferencesView()
+                case .helpSupport:
+                    HelpSupportView()
+                case .faq:
+                    FAQView()
+                case .reportBug:
+                    ReportBugView()
+                case .terms:
+                    TermsPlaceholderView()
+                case .privacy:
+                    PrivacyPlaceholderView()
+                case .editAvatar:
+                    EditAvatarView()
+                case .updateGoals:
+                    UpdateGoalsView()
                 }
             }
             .task {

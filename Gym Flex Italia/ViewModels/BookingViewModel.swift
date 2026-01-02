@@ -26,9 +26,6 @@ final class BookingViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var showConfirmation = false
     
-    private let bookingService = BookingService.shared
-    private let gymsService = GymsService.shared
-    
     let durationOptions = [30, 60, 90, 120, 180, 240]
     
     // MARK: - Computed Properties
@@ -51,7 +48,7 @@ final class BookingViewModel: ObservableObject {
     }
     
     // MARK: - Create Booking
-    func createBooking() async {
+    func createBooking(using service: BookingServiceProtocol) async {
         guard let gym = selectedGym else {
             errorMessage = "No gym selected"
             return
@@ -61,15 +58,39 @@ final class BookingViewModel: ObservableObject {
         errorMessage = nil
         
         do {
-            let booking = try await bookingService.createBooking(
+            let confirmation = try await service.createBooking(
                 gymId: gym.id,
-                startTime: selectedDate,
+                date: selectedDate,
                 duration: selectedDuration
             )
             
-            currentBooking = booking
+            // Create a mock booking from confirmation for display
+            let endTime = confirmation.startTime.addingTimeInterval(TimeInterval(confirmation.duration * 60))
+            currentBooking = Booking(
+                id: confirmation.referenceCode,
+                userId: "user_123",
+                gymId: gym.id,
+                gymName: gym.name,
+                gymAddress: gym.address,
+                gymCoverImageURL: gym.coverImageURL,
+                startTime: confirmation.startTime,
+                endTime: endTime,
+                duration: confirmation.duration,
+                pricePerHour: gym.pricePerHour,
+                totalPrice: confirmation.totalPrice,
+                currency: gym.currency,
+                status: .confirmed,
+                checkinCode: nil,
+                checkinTime: nil,
+                checkoutTime: nil,
+                qrCodeData: nil,
+                qrCodeExpiresAt: nil,
+                createdAt: Date(),
+                updatedAt: Date(),
+                cancelledAt: nil,
+                cancellationReason: nil
+            )
             showConfirmation = true
-            await loadBookings()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -78,12 +99,12 @@ final class BookingViewModel: ObservableObject {
     }
     
     // MARK: - Load Bookings
-    func loadBookings() async {
+    func loadBookings(using service: BookingHistoryServiceProtocol) async {
         isLoading = true
         errorMessage = nil
         
         do {
-            bookings = try await bookingService.fetchBookings()
+            bookings = try await service.fetchBookings()
             categorizeBookings()
         } catch {
             errorMessage = error.localizedDescription
@@ -105,32 +126,20 @@ final class BookingViewModel: ObservableObject {
     }
     
     // MARK: - Load Availability
-    func loadAvailability() async {
-        guard let gym = selectedGym else { return }
-        
-        isLoading = true
-        errorMessage = nil
-        
-        do {
-            availableSlots = try await gymsService.fetchAvailability(
-                gymId: gym.id,
-                date: selectedDate
-            )
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-        
-        isLoading = false
+    func loadAvailability(using service: GymServiceProtocol) async {
+        // Availability fetching not supported by current protocol
+        // This would need to be added to GymServiceProtocol if needed
+        availableSlots = []
     }
     
     // MARK: - Cancel Booking
-    func cancelBooking(_ booking: Booking) async {
+    func cancelBooking(_ booking: Booking, using service: BookingHistoryServiceProtocol) async {
         isLoading = true
         errorMessage = nil
         
         do {
-            _ = try await bookingService.cancelBooking(id: booking.id)
-            await loadBookings()
+            _ = try await service.cancelBooking(id: booking.id)
+            await loadBookings(using: service)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -139,12 +148,12 @@ final class BookingViewModel: ObservableObject {
     }
     
     // MARK: - Fetch Booking Detail
-    func fetchBookingDetail(_ bookingId: String) async {
+    func fetchBookingDetail(_ bookingId: String, using service: BookingHistoryServiceProtocol) async {
         isLoading = true
         errorMessage = nil
         
         do {
-            currentBooking = try await bookingService.fetchBooking(id: bookingId)
+            currentBooking = try await service.fetchBooking(id: bookingId)
         } catch {
             errorMessage = error.localizedDescription
         }

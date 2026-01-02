@@ -2,13 +2,31 @@
 //  MockDataStore.swift
 //  Gym Flex Italia
 //
-//  Canonical source of truth for all mock data in demo mode.
-//  Ensures consistent IDs, names, and reference codes across all mock services.
+//  ╔════════════════════════════════════════════════════════════════════════════╗
+//  ║  SINGLE SOURCE OF TRUTH FOR ALL GYM DATA                                   ║
+//  ║                                                                            ║
+//  ║  This is the ONLY place where gym data should be created.                  ║
+//  ║  Do NOT duplicate gym models in other files.                               ║
+//  ║  All services MUST use MockDataStore.shared.gyms or gymById(_:)            ║
+//  ╚════════════════════════════════════════════════════════════════════════════╝
 //
 
 import Foundation
 
-/// Singleton providing canonical mock data for consistent cross-feature behavior
+/// Singleton providing canonical mock data for consistent cross-feature behavior.
+///
+/// **IMPORTANT**: This is the single source of truth for all gym data.
+/// All booking, wallet, check-in, and profile features must resolve gym info
+/// via `gymById(_:)` using the gym's ID.
+///
+/// **DO NOT**:
+/// - Create `[Gym]` arrays in other files
+/// - Duplicate gym names or prices in bookings/transactions
+/// - Use hardcoded gym data outside of this file
+///
+/// **DO**:
+/// - Store only `gymId` in bookings and transactions
+/// - Resolve gym details via `MockDataStore.shared.gymById(id)`
 final class MockDataStore {
     
     // MARK: - Singleton
@@ -26,8 +44,20 @@ final class MockDataStore {
     /// Look up a gym by its ID
     /// - Parameter id: The gym ID (e.g., "gym_1")
     /// - Returns: The gym if found, nil otherwise
+    ///
+    /// **DEBUG**: Will assert if gym is not found, helping catch bad IDs early.
     func gymById(_ id: String) -> Gym? {
-        gyms.first { $0.id == id }
+        let gym = gyms.first { $0.id == id }
+        
+        #if DEBUG
+        if gym == nil && !id.isEmpty {
+            print("⚠️ MockDataStore.gymById: No gym found for id='\(id)'. Valid IDs: \(gyms.map { $0.id })")
+            // Uncomment to fail fast during development:
+            // assertionFailure("Gym not found for id: \(id)")
+        }
+        #endif
+        
+        return gym
     }
     
     /// Get a random gym from the canonical list

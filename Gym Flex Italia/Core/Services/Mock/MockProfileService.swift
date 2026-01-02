@@ -64,6 +64,44 @@ final class MockProfileService: ProfileServiceProtocol {
         return updatedProfile
     }
     
+    func recordWorkout(bookingId: String) async throws -> Profile {
+        // Simulate network delay (300-500ms)
+        let delay = UInt64.random(in: 300_000_000...500_000_000)
+        try await Task.sleep(nanoseconds: delay)
+        
+        // Increment workout count and potentially level
+        let newTotalWorkouts = currentProfile.totalWorkouts + 1
+        var newLevel = currentProfile.avatarLevel
+        
+        // Level up every 5 workouts
+        if newTotalWorkouts % 5 == 0 {
+            newLevel = min(newLevel + 1, 50) // Cap at level 50
+        }
+        
+        currentProfile = Profile(
+            id: currentProfile.id,
+            email: currentProfile.email,
+            fullName: currentProfile.fullName,
+            phoneNumber: currentProfile.phoneNumber,
+            avatarURL: currentProfile.avatarURL,
+            dateOfBirth: currentProfile.dateOfBirth,
+            gender: currentProfile.gender,
+            avatarLevel: newLevel,
+            totalWorkouts: newTotalWorkouts,
+            currentStreak: currentProfile.currentStreak + 1,
+            longestStreak: max(currentProfile.longestStreak, currentProfile.currentStreak + 1),
+            avatarStyle: currentProfile.avatarStyle,
+            fitnessGoals: currentProfile.fitnessGoals,
+            preferredWorkoutTypes: currentProfile.preferredWorkoutTypes,
+            walletBalance: currentProfile.walletBalance,
+            createdAt: currentProfile.createdAt,
+            updatedAt: Date(),
+            lastWorkoutDate: Date()
+        )
+        
+        return currentProfile
+    }
+    
     // MARK: - Validation
     
     private func validateProfile(_ profile: Profile) throws {
