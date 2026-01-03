@@ -151,7 +151,7 @@ struct QRCheckinView: View {
                                 .stroke(AppColors.danger.opacity(0.3), lineWidth: 16)
                         )
                     
-                    Text("SESSION FINISHED")
+                    Text("SESSION ENDED")
                         .font(AppFonts.label)
                         .foregroundColor(AppColors.danger)
                         .textCase(.uppercase)

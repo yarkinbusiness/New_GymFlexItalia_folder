@@ -68,8 +68,8 @@ final class ProfileViewModel: ObservableObject {
             // Load wallet balance from canonical WalletStore
             walletBalanceCents = WalletStore.shared.balanceCents
             
-            // Load booking statistics from canonical MockBookingStore
-            loadBookingStatistics()
+            // Load booking statistics from booking history service (matches Booking History screen)
+            await loadBookingStatistics(using: container.bookingHistoryService)
             
         } catch {
             errorMessage = error.localizedDescription
@@ -90,42 +90,81 @@ final class ProfileViewModel: ObservableObject {
     
     /// Legacy refresh method (for backward compatibility)
     func refresh() async {
-        // Refresh booking statistics from store
-        loadBookingStatistics()
+        // Refresh booking statistics from store (fallback to local store)
+        loadBookingStatisticsFromStore()
         
         // Refresh wallet balance
         walletBalanceCents = WalletStore.shared.balanceCents
     }
     
-    // MARK: - Booking Statistics (from canonical MockBookingStore)
+    // MARK: - Booking Statistics (matches Booking History screen logic)
     
-    private func loadBookingStatistics() {
+    /// Load booking statistics from booking history service
+    /// Uses same data source and logic as BookingHistoryViewModel
+    private func loadBookingStatistics(using service: BookingHistoryServiceProtocol) async {
+        let now = Date()
+        
+        do {
+            let bookings = try await service.fetchBookings()
+            
+            // Active: current session if exists (not cancelled, endTime > now)
+            let store = MockBookingStore.shared
+            activeCount = (store.currentUserSession() != nil) ? 1 : 0
+            
+            // Past: same logic as BookingHistoryViewModel.pastBookings
+            // (cancelled, completed, or endTime <= now)
+            pastCount = bookings.filter { booking in
+                booking.status == .cancelled || booking.status == .completed || booking.endTime <= now
+            }.count
+            
+            // Last booking summary: most recent booking
+            if let lastBooking = bookings.sorted(by: { $0.startTime > $1.startTime }).first {
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "MMM d"
+                let dateString = dateFormatter.string(from: lastBooking.startTime)
+                lastBookingSummary = "\(lastBooking.gymName ?? "Gym") • \(dateString)"
+            } else {
+                lastBookingSummary = nil
+            }
+            
+            #if DEBUG
+            print("👤 ProfileViewModel.loadBookingStatistics: active=\(activeCount), past=\(pastCount) (from service)")
+            #endif
+            
+        } catch {
+            // Fallback to local store on error
+            loadBookingStatisticsFromStore()
+        }
+    }
+    
+    /// Fallback: Load booking statistics from local store
+    private func loadBookingStatisticsFromStore() {
         let store = MockBookingStore.shared
         let now = Date()
         
-        // Only count USER bookings (not seeded demo data)
-        let userBookings = store.userBookings()
+        // Get ALL bookings (including seeded) from the store
+        let allBookings = store.allBookings()
         
         // Active: current session if exists (0 or 1)
         activeCount = (store.currentUserSession() != nil) ? 1 : 0
         
-        // Past: endTime <= now OR status is completed/cancelled
-        pastCount = userBookings.filter { booking in
-            booking.endTime <= now || booking.status == .completed || booking.status == .cancelled
+        // Past: same logic as BookingHistoryViewModel.pastBookings
+        pastCount = allBookings.filter { booking in
+            booking.status == .cancelled || booking.status == .completed || booking.endTime <= now
         }.count
         
-        // Last booking summary: most recent user booking
-        if let lastBooking = store.lastUserBooking() {
+        // Last booking summary: most recent booking
+        if let lastBooking = allBookings.sorted(by: { $0.startTime > $1.startTime }).first {
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "MMM d"
             let dateString = dateFormatter.string(from: lastBooking.startTime)
-            lastBookingSummary = "\(lastBooking.gymName) • \(dateString)"
+            lastBookingSummary = "\(lastBooking.gymName ?? "Gym") • \(dateString)"
         } else {
             lastBookingSummary = nil
         }
         
         #if DEBUG
-        print("👤 ProfileViewModel.loadBookingStatistics: active=\(activeCount), past=\(pastCount)")
+        print("👤 ProfileViewModel.loadBookingStatisticsFromStore: active=\(activeCount), past=\(pastCount) (from store)")
         #endif
     }
     

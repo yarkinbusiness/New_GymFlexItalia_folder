@@ -185,7 +185,7 @@ struct CheckInView: View {
                 .foregroundColor(AppColors.success)
             
             VStack(spacing: Spacing.sm) {
-                Text("Checked In!")
+                Text("Session Active")  // Renamed from "Checked In!" - owner app concept
                     .font(AppFonts.h2)
                     .foregroundColor(.primary)
                 

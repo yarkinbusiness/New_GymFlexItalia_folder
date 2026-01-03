@@ -10,23 +10,80 @@ import CoreLocation
 import Combine
 import UIKit
 
+/// Location issue states for UI guidance
+enum LocationIssue: Equatable {
+    case notDetermined          // User hasn't responded to permission prompt yet
+    case deniedOrRestricted     // User denied or system restricted
+    case authorizedButNoFix     // Authorized but can't get location (Ask Next Time, no GPS, simulator)
+    
+    var userGuidance: String {
+        switch self {
+        case .notDetermined:
+            return "Enable location to see nearby gyms"
+        case .deniedOrRestricted:
+            return "Location access denied. Please enable in Settings."
+        case .authorizedButNoFix:
+            return "Location is allowed, but we can't get a fix. Please set Location to 'While Using the App' in Settings."
+        }
+    }
+    
+    var buttonLabel: String {
+        switch self {
+        case .notDetermined:
+            return "Enable Location"
+        case .deniedOrRestricted, .authorizedButNoFix:
+            return "Open Settings"
+        }
+    }
+}
+
 /// Location service for user location tracking
 final class LocationService: NSObject, ObservableObject {
     
     static let shared = LocationService()
     
+    // MARK: - Published State
+    
     @Published var currentLocation: CLLocation?
     @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
     @Published var error: LocationError?
     
+    /// Current location issue requiring user action (nil = no issue)
+    @Published var locationIssue: LocationIssue? = nil
+    
+    /// Timestamp of last successful location fix
+    @Published var lastFixDate: Date? = nil
+    
+    /// Debug: source of last fix (for logging)
+    var lastFixSource: String? = nil
+    
+    // MARK: - Private
+    
     private let locationManager = CLLocationManager()
+    private var retryTask: Task<Void, Never>? = nil
     
     private override init() {
         super.init()
+        
+        // CRITICAL: Set delegate once, strongly retained
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
         locationManager.distanceFilter = 100 // Update every 100 meters
         authorizationStatus = locationManager.authorizationStatus
+        updateLocationIssue()
+        
+        #if DEBUG
+        // Verify Info.plist has location usage description
+        let hasLocationKey = Bundle.main.object(forInfoDictionaryKey: "NSLocationWhenInUseUsageDescription") != nil
+        print("📍 LocationService.init: status=\(authorizationStatusName)")
+        print("📍 INFO_PLIST has NSLocationWhenInUseUsageDescription: \(hasLocationKey)")
+        print("📍 LocationManager delegate set: \(locationManager.delegate != nil)")
+        
+        if !hasLocationKey {
+            print("⚠️⚠️⚠️ CRITICAL: NSLocationWhenInUseUsageDescription missing from Info.plist!")
+            print("⚠️⚠️⚠️ iOS will NOT show the location permission prompt without this key!")
+        }
+        #endif
     }
     
     // MARK: - Authorization
@@ -45,9 +102,18 @@ final class LocationService: NSObject, ObservableObject {
     @MainActor
     func requestLocationPermission() {
         #if DEBUG
-        print("📍 LocationService.requestLocationPermission called")
+        print("📍 LocationService.requestLocationPermission called (current status: \(authorizationStatusName))")
+        print("📍 Requesting auth on main thread: \(Thread.isMainThread)")
         #endif
-        locationManager.requestWhenInUseAuthorization()
+        
+        // Only request if not determined - otherwise prompt won't show
+        if authorizationStatus == .notDetermined {
+            print("📍 LocationService: Calling requestWhenInUseAuthorization NOW...")
+            locationManager.requestWhenInUseAuthorization()
+            print("📍 LocationService: requestWhenInUseAuthorization sent to iOS")
+        } else {
+            print("📍 LocationService: Permission already determined (\(authorizationStatusName)), skipping request")
+        }
     }
     
     /// Check if location is authorized
@@ -67,14 +133,109 @@ final class LocationService: NSObject, ObservableObject {
         }
     }
     
+    /// Update the locationIssue based on current state
+    @MainActor
+    private func updateLocationIssue() {
+        switch authorizationStatus {
+        case .notDetermined:
+            locationIssue = .notDetermined
+        case .denied, .restricted:
+            locationIssue = .deniedOrRestricted
+        case .authorizedWhenInUse, .authorizedAlways:
+            // Authorized - check if we have a location
+            if currentLocation != nil {
+                locationIssue = nil  // All good!
+            } else {
+                // Authorized but no location yet - don't set authorizedButNoFix immediately
+                // Let ensureFreshLocation handle the retry logic
+                locationIssue = nil  // Will be set by ensureFreshLocation if retries fail
+            }
+        @unknown default:
+            locationIssue = nil
+        }
+        
+        #if DEBUG
+        if let issue = locationIssue {
+            print("📍 LocationService.updateLocationIssue: \(issue)")
+        } else {
+            print("📍 LocationService.updateLocationIssue: nil (no issue)")
+        }
+        #endif
+    }
+    
+    // MARK: - Resilient Location Acquisition
+    
+    /// Ensure we have a fresh location, with retry logic
+    /// Call this on view appear, scene active, and after authorization changes
+    @MainActor
+    func ensureFreshLocation(reason: String) async {
+        // Cancel any existing retry task
+        retryTask?.cancel()
+        
+        #if DEBUG
+        print("📍 LocationService.ensureFreshLocation(reason: \(reason)) status=\(authorizationStatusName) hasLocation=\(currentLocation != nil)")
+        #endif
+        
+        // Refresh authorization status first
+        refreshAuthorizationStatus()
+        updateLocationIssue()
+        
+        // If not authorized, nothing to do
+        guard isAuthorized else {
+            #if DEBUG
+            print("📍 LocationService.ensureFreshLocation: Not authorized, returning")
+            #endif
+            return
+        }
+        
+        // Start location updates and request one-time location
+        startUpdatingLocation()
+        requestOneTimeLocation()
+        
+        // Wait 2 seconds for location to arrive
+        retryTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+            
+            if Task.isCancelled { return }
+            
+            if currentLocation == nil {
+                #if DEBUG
+                print("📍 LocationService.ensureFreshLocation: No location after 2s, retrying...")
+                #endif
+                
+                // Retry once
+                requestOneTimeLocation()
+                
+                // Wait another 2 seconds
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                
+                if Task.isCancelled { return }
+                
+                if currentLocation == nil {
+                    // Still no location - set authorizedButNoFix issue
+                    #if DEBUG
+                    print("📍 LocationService.ensureFreshLocation: Still no location after retry, setting authorizedButNoFix")
+                    #endif
+                    locationIssue = .authorizedButNoFix
+                }
+            }
+        }
+    }
+    
     // MARK: - Location Updates
     
     func startUpdatingLocation() {
+        #if DEBUG
+        print("📍 LocationService.startUpdatingLocation called (authorized: \(isAuthorized))")
+        #endif
+        
         guard isAuthorized else {
             error = .notAuthorized
+            print("📍 LocationService.startUpdatingLocation: NOT authorized, aborting")
             return
         }
         locationManager.startUpdatingLocation()
+        print("📍 LocationService.startUpdatingLocation: Location updates STARTED")
     }
     
     func stopUpdatingLocation() {
@@ -82,11 +243,16 @@ final class LocationService: NSObject, ObservableObject {
     }
     
     func requestOneTimeLocation() {
+        #if DEBUG
+        print("📍 LocationService.requestOneTimeLocation called (authorized: \(isAuthorized))")
+        #endif
+        
         guard isAuthorized else {
             error = .notAuthorized
             return
         }
         locationManager.requestLocation()
+        print("📍 LocationService.requestOneTimeLocation: One-time request sent")
     }
     
     // MARK: - Smart Enable Handler
@@ -181,6 +347,11 @@ extension LocationService: CLLocationManagerDelegate {
         print("📍 LocationService.didChangeAuthorization -> \(authorizationStatusName)")
         #endif
         
+        // Update location issue state
+        Task { @MainActor in
+            updateLocationIssue()
+        }
+        
         switch authorizationStatus {
         case .authorizedWhenInUse, .authorizedAlways:
             error = nil
@@ -198,10 +369,18 @@ extension LocationService: CLLocationManagerDelegate {
         guard let location = locations.last else { return }
         currentLocation = location
         error = nil
+        lastFixDate = Date()
+        lastFixSource = "didUpdateLocations"
         
         #if DEBUG
-        print("📍 LocationService.didUpdateLocations -> \(location.coordinate.latitude),\(location.coordinate.longitude)")
+        print("📍 LocationService.didUpdateLocations -> \(location.coordinate.latitude),\(location.coordinate.longitude) at \(lastFixDate!)")
         #endif
+        
+        // Clear any location issue since we now have a fix
+        Task { @MainActor in
+            locationIssue = nil
+            print("📍 LocationService: Location fix received, cleared locationIssue")
+        }
     }
     
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
@@ -215,6 +394,17 @@ extension LocationService: CLLocationManagerDelegate {
                 self.error = .notAuthorized
             case .network:
                 self.error = .networkError
+            case .locationUnknown:
+                // Location can't be determined - device issue or simulator
+                #if DEBUG
+                print("📍 LocationService: CLError.locationUnknown - may be simulator or no GPS")
+                #endif
+                // If authorized but can't get location, set the issue
+                if isAuthorized && currentLocation == nil {
+                    Task { @MainActor in
+                        locationIssue = .authorizedButNoFix
+                    }
+                }
             default:
                 self.error = .unknown
             }

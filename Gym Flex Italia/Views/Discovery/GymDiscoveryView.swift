@@ -15,6 +15,9 @@ struct GymDiscoveryView: View {
     @EnvironmentObject var router: AppRouter
     @Environment(\.appContainer) private var appContainer
     
+    /// Selected gym for showing Route/Details sheet on map pin tap
+    @State private var selectedGymForSheet: Gym? = nil
+    
     var body: some View {
         ZStack {
             // Background
@@ -54,12 +57,57 @@ struct GymDiscoveryView: View {
         .sheet(isPresented: $viewModel.showFilters) {
             DiscoveryFilterSheet(filter: $viewModel.filter)
         }
+        .sheet(item: $selectedGymForSheet) { gym in
+            GymPinActionSheet(
+                gym: gym,
+                onRoute: {
+                    openAppleMapsRoute(to: gym)
+                    selectedGymForSheet = nil
+                },
+                onViewDetails: {
+                    selectedGymForSheet = nil
+                    router.pushGymDetail(gymId: gym.id)
+                },
+                onDismiss: {
+                    selectedGymForSheet = nil
+                }
+            )
+            .presentationDetents([.height(220)])
+            .presentationDragIndicator(.visible)
+        }
         .task {
             await viewModel.loadGyms(using: appContainer.gymService)
         }
         .onAppear {
             viewModel.requestLocationPermission()
         }
+    }
+    
+    // MARK: - Apple Maps Route
+    
+    /// Open Apple Maps with driving directions to the gym
+    private func openAppleMapsRoute(to gym: Gym) {
+        let coordinate = gym.coordinate
+        
+        // Validate coordinates
+        guard CLLocationCoordinate2DIsValid(coordinate) else {
+            print("⚠️ Invalid coordinates for gym: \(gym.name)")
+            return
+        }
+        
+        let placemark = MKPlacemark(coordinate: coordinate)
+        let mapItem = MKMapItem(placemark: placemark)
+        mapItem.name = gym.name
+        
+        let launchOptions: [String: Any] = [
+            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+        ]
+        
+        mapItem.openInMaps(launchOptions: launchOptions)
+        
+        #if DEBUG
+        print("📍 Opening Apple Maps route to: \(gym.name) at \(coordinate.latitude), \(coordinate.longitude)")
+        #endif
     }
     
     // MARK: - Header Section
@@ -234,8 +282,9 @@ struct GymDiscoveryView: View {
             region: $viewModel.mapRegion,
             gyms: viewModel.filteredGyms,
             onGymSelected: { gym in
+                // Show action sheet with Route/Details options instead of immediate navigation
                 viewModel.selectGym(gym)
-                router.pushGymDetail(gymId: gym.id)
+                selectedGymForSheet = gym
             },
             showUserLocation: true
         )
@@ -449,4 +498,110 @@ struct GymDiscoveryCard: View {
     GymDiscoveryView()
         .environmentObject(AppRouter())
         .environment(\.appContainer, .demo())
+}
+
+// MARK: - Gym Pin Action Sheet
+
+/// Sheet displayed when user taps a gym pin on the map
+struct GymPinActionSheet: View {
+    let gym: Gym
+    let onRoute: () -> Void
+    let onViewDetails: () -> Void
+    let onDismiss: () -> Void
+    
+    /// Check if gym has valid coordinates for routing
+    private var hasValidCoordinates: Bool {
+        CLLocationCoordinate2DIsValid(gym.coordinate) &&
+        gym.latitude != 0 && gym.longitude != 0
+    }
+    
+    var body: some View {
+        VStack(spacing: Spacing.md) {
+            // Header
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(gym.name)
+                        .font(AppFonts.h4)
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                    
+                    Text(gym.address)
+                        .font(AppFonts.bodySmall)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                    
+                    // Price tag
+                    Text("€\(String(format: "%.1f", gym.pricePerHour))/hour")
+                        .font(AppFonts.caption)
+                        .foregroundColor(AppColors.brand)
+                }
+                
+                Spacer()
+                
+                // Close button
+                Button {
+                    onDismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(.secondary.opacity(0.5))
+                }
+            }
+            
+            Divider()
+            
+            // Action buttons
+            HStack(spacing: Spacing.md) {
+                // Route button (primary)
+                Button {
+                    onRoute()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                        Text("Route")
+                    }
+                    .font(AppFonts.body)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, Spacing.sm)
+                    .background(
+                        hasValidCoordinates ? AppColors.brand : Color.gray
+                    )
+                    .cornerRadius(CornerRadii.md)
+                }
+                .disabled(!hasValidCoordinates)
+                
+                // View Details button (secondary)
+                Button {
+                    onViewDetails()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "info.circle")
+                        Text("Details")
+                    }
+                    .font(AppFonts.body)
+                    .fontWeight(.semibold)
+                    .foregroundColor(AppColors.brand)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, Spacing.sm)
+                    .background(AppColors.brand.opacity(0.1))
+                    .cornerRadius(CornerRadii.md)
+                }
+            }
+            
+            // Warning if coordinates unavailable
+            if !hasValidCoordinates {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12))
+                    Text("Location unavailable for this gym")
+                        .font(AppFonts.caption)
+                }
+                .foregroundColor(.orange)
+            }
+        }
+        .padding(Spacing.md)
+        .background(Color(.systemBackground))
+    }
 }

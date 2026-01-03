@@ -249,11 +249,11 @@ final class HomeViewModel: ObservableObject {
             ))
         }
         
-        // 2. Completed/past bookings (exclude active session)
+        // 2. Completed/past/cancelled bookings (exclude active session)
         let completedItems = recentBookings
             .filter { booking in
-                // Past bookings (ended) or explicitly completed
-                (booking.endTime < now || booking.status == .completed) &&
+                // Past bookings (ended), explicitly completed, or cancelled
+                (booking.endTime < now || booking.status == .completed || booking.status == .cancelled) &&
                 // Exclude active session if it exists
                 booking.id != activeBooking?.id
             }

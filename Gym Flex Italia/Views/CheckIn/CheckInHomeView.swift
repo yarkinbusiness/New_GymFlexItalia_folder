@@ -36,6 +36,11 @@ struct CheckInHomeView: View {
     @State private var now = Date()
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     
+    /// Insufficient balance alert state
+    @State private var showInsufficientBalanceAlert = false
+    @State private var insufficientBalanceRequired: Int = 0  // cents
+    @State private var insufficientBalanceAvailable: Int = 0 // cents
+    
     var body: some View {
         ZStack {
             Color(.systemBackground)
@@ -106,6 +111,19 @@ struct CheckInHomeView: View {
                 }
             }
         }
+        .alert("Insufficient Balance", isPresented: $showInsufficientBalanceAlert) {
+            Button("Top Up Wallet") {
+                DemoTapLogger.log("CheckIn.InsufficientBalance.TopUp")
+                router.pushWallet()
+            }
+            Button("Cancel", role: .cancel) {
+                DemoTapLogger.log("CheckIn.InsufficientBalance.Cancel")
+            }
+        } message: {
+            let required = String(format: "€%.2f", Double(insufficientBalanceRequired) / 100.0)
+            let available = String(format: "€%.2f", Double(insufficientBalanceAvailable) / 100.0)
+            Text("You don't have enough balance to complete this action.\n\nRequired: \(required)\nAvailable: \(available)")
+        }
     }
     
     /// Load current session using SHARED currentUserSession() logic
@@ -141,10 +159,15 @@ struct CheckInHomeView: View {
     // MARK: - Current Session Section
     
     private func currentSessionSection(_ booking: Booking) -> some View {
-        VStack(spacing: Spacing.lg) {
+        let store = MockBookingStore.shared
+        let isActive = store.isSessionActive(booking, now: now)
+        let isEnded = store.isSessionEnded(booking, now: now)
+        let isCancelled = store.isSessionCancelled(booking)
+        
+        return VStack(spacing: Spacing.lg) {
             // Section Header
             HStack {
-                Text("Current Session")
+                Text(isCancelled ? "Session Cancelled" : (isEnded ? "Session Ended" : "Current Session"))
                     .font(AppFonts.h4)
                     .foregroundColor(.primary)
                 
@@ -153,23 +176,213 @@ struct CheckInHomeView: View {
                 statusBadge(booking)
             }
             
-            // Countdown Timer
-            countdownSection(booking)
-            
-            // Extend Time Buttons (only when session is active)
-            if booking.endTime > now {
+            if isCancelled {
+                // SESSION CANCELLED: Show cancelled state with CTAs
+                sessionCancelledPanel(booking)
+                
+            } else if isActive {
+                // ACTIVE SESSION: Show full UI
+                
+                // Countdown Timer
+                countdownSection(booking)
+                
+                // Extend Time Buttons
                 extendTimeSection(booking)
+                
+                // QR Card (only for active sessions)
+                qrCodeCard(booking)
+                
+                // Booking Details Card
+                bookingDetailsCard(booking)
+                
+                // Note: Manual check-in removed. Check-in is handled by Gym Owner app scanning QR.
+                
+            } else if isEnded {
+                // SESSION ENDED: Show ended state with CTAs
+                sessionEndedPanel(booking)
             }
+        }
+    }
+    
+    // MARK: - Session Ended Panel
+    
+    private func sessionEndedPanel(_ booking: Booking) -> some View {
+        VStack(spacing: Spacing.lg) {
+            // Ended indicator
+            VStack(spacing: Spacing.sm) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 48))
+                    .foregroundColor(AppColors.success)
+                
+                Text("Session Ended")
+                    .font(AppFonts.h3)
+                    .foregroundColor(.primary)
+                
+                Text("Thanks for training at \(booking.gymName ?? "the gym")!")
+                    .font(AppFonts.body)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(Spacing.xl)
+            .background(AppColors.success.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: CornerRadii.lg))
             
-            // QR Card (QR code is ONLY shown here on Check-in tab)
-            qrCodeCard(booking)
+            // Session Summary
+            VStack(spacing: Spacing.sm) {
+                HStack {
+                    Text("Duration")
+                        .font(AppFonts.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("\(booking.duration) minutes")
+                        .font(AppFonts.body)
+                        .foregroundColor(.primary)
+                }
+                
+                HStack {
+                    Text("Cost")
+                        .font(AppFonts.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(String(format: "€%.2f", booking.totalPrice))
+                        .font(AppFonts.body)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                }
+                
+                HStack {
+                    Text("Ended")
+                        .font(AppFonts.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(booking.endTime.formatted(date: .abbreviated, time: .shortened))
+                        .font(AppFonts.body)
+                        .foregroundColor(.primary)
+                }
+            }
+            .padding(Spacing.md)
+            .background(Color(.secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: CornerRadii.md))
             
-            // Booking Details Card
-            bookingDetailsCard(booking)
+            // Action Buttons
+            VStack(spacing: Spacing.sm) {
+                Button {
+                    DemoTapLogger.log("CheckIn.SessionEnded.BookAgain")
+                    router.switchToTab(.discover)
+                } label: {
+                    Text("Book Again")
+                        .font(AppFonts.label)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, Spacing.md)
+                        .background(AppGradients.primary)
+                        .clipShape(RoundedRectangle(cornerRadius: CornerRadii.md))
+                }
+                
+                Button {
+                    DemoTapLogger.log("CheckIn.SessionEnded.ViewHistory")
+                    router.pushBookingHistory()
+                } label: {
+                    Text("View History")
+                        .font(AppFonts.label)
+                        .foregroundColor(AppColors.brand)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, Spacing.md)
+                        .background(Color(.secondarySystemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: CornerRadii.md))
+                }
+            }
+        }
+    }
+    
+    // MARK: - Session Cancelled Panel
+    
+    private func sessionCancelledPanel(_ booking: Booking) -> some View {
+        VStack(spacing: Spacing.lg) {
+            // Cancelled indicator
+            VStack(spacing: Spacing.sm) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 48))
+                    .foregroundColor(.gray)
+                
+                Text("Session Cancelled")
+                    .font(AppFonts.h3)
+                    .foregroundColor(.primary)
+                
+                Text("This session has been cancelled. No charges were refunded.")
+                    .font(AppFonts.body)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(Spacing.xl)
+            .background(Color.gray.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: CornerRadii.lg))
             
-            // Check In Button (for manual check-in)
-            if booking.status == .confirmed {
-                checkInButton(booking)
+            // Session Summary
+            VStack(spacing: Spacing.sm) {
+                HStack {
+                    Text("Gym")
+                        .font(AppFonts.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(booking.gymName ?? "Unknown")
+                        .font(AppFonts.body)
+                        .foregroundColor(.primary)
+                }
+                
+                HStack {
+                    Text("Cost")
+                        .font(AppFonts.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(String(format: "€%.2f", booking.totalPrice))
+                        .font(AppFonts.body)
+                        .foregroundColor(.primary)
+                }
+                
+                HStack {
+                    Text("Status")
+                        .font(AppFonts.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("Cancelled • No Refund")
+                        .font(AppFonts.body)
+                        .foregroundColor(.gray)
+                }
+            }
+            .padding(Spacing.md)
+            .background(Color(.secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: CornerRadii.md))
+            
+            // Action Buttons
+            VStack(spacing: Spacing.sm) {
+                Button {
+                    DemoTapLogger.log("CheckIn.SessionCancelled.BookAgain")
+                    router.switchToTab(.discover)
+                } label: {
+                    Text("Book Again")
+                        .font(AppFonts.label)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, Spacing.md)
+                        .background(AppGradients.primary)
+                        .clipShape(RoundedRectangle(cornerRadius: CornerRadii.md))
+                }
+                
+                Button {
+                    DemoTapLogger.log("CheckIn.SessionCancelled.ViewHistory")
+                    router.pushBookingHistory()
+                } label: {
+                    Text("View History")
+                        .font(AppFonts.label)
+                        .foregroundColor(AppColors.brand)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, Spacing.md)
+                        .background(Color(.secondarySystemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: CornerRadii.md))
+                }
             }
         }
     }
@@ -308,22 +521,32 @@ struct CheckInHomeView: View {
         
         DemoTapLogger.log("CheckIn.Extend.\(minutes)min", context: "cost: \(costCents) cents")
         
+        // Check wallet balance BEFORE attempting debit
+        let walletStore = WalletStore.shared
+        let availableBalance = walletStore.balanceCents
+        
+        if availableBalance < costCents {
+            // Show insufficient balance alert
+            insufficientBalanceRequired = costCents
+            insufficientBalanceAvailable = availableBalance
+            showInsufficientBalanceAlert = true
+            isExtending = false
+            print("⚠️ CheckInHomeView: Insufficient balance for extension. Required: \(costCents), Available: \(availableBalance)")
+            return
+        }
+        
         do {
-            // Check wallet balance
-            let walletStore = WalletStore.shared
-            guard walletStore.balanceCents >= costCents else {
-                throw BookingExtensionError.insufficientFunds
-            }
-            
             // Create unique extension reference (supports multiple extensions)
             let extRef = "\(booking.id)-ext-\(minutes)-\(Int(Date().timeIntervalSince1970))"
             
-            // Debit wallet
+            // Debit wallet (links to same booking.id for totalPaidCents calculation)
             try walletStore.applyDebitForBooking(
                 amountCents: costCents,
                 bookingRef: extRef,
                 gymName: booking.gymName ?? "Gym",
-                gymId: booking.gymId
+                gymId: booking.gymId,
+                bookingIdOverride: booking.id,
+                paymentTransactionIdOverride: extRef
             )
             
             // Extend booking in store
@@ -481,10 +704,19 @@ struct CheckInHomeView: View {
                         .font(AppFonts.caption)
                         .foregroundColor(.secondary)
                     
-                    Text(String(format: "€%.2f", booking.totalPrice))
-                        .font(AppFonts.body)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.primary)
+                    // Show total paid from wallet (initial + extensions)
+                    let paidCents = WalletStore.shared.totalPaidCents(for: booking.id)
+                    if paidCents > 0 {
+                        Text(PricingCalculator.formatCentsAsEUR(paidCents))
+                            .font(AppFonts.body)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+                    } else {
+                        Text(String(format: "€%.2f", booking.totalPrice))
+                            .font(AppFonts.body)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+                    }
                 }
             }
         }
@@ -493,44 +725,43 @@ struct CheckInHomeView: View {
         .clipShape(RoundedRectangle(cornerRadius: CornerRadii.lg))
     }
     
-    // MARK: - Check In Button
-    
-    private func checkInButton(_ booking: Booking) -> some View {
-        Button {
-            DemoTapLogger.log("CheckInHome.CheckInNow")
-            router.pushCheckIn(bookingId: booking.id)
-        } label: {
-            HStack {
-                Image(systemName: "checkmark.circle.fill")
-                Text("Check In Now")
-            }
-            .font(AppFonts.label)
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, Spacing.md)
-            .background(AppGradients.primary)
-            .clipShape(RoundedRectangle(cornerRadius: CornerRadii.md))
-        }
-    }
-    
     // MARK: - Status Badge
     
     private func statusBadge(_ booking: Booking) -> some View {
+        let isCancelled = booking.status == .cancelled
         let remaining = booking.endTime.timeIntervalSince(now)
-        let isEnded = remaining <= 0
+        let isEnded = remaining <= 0 && !isCancelled
+        
+        // Determine label and color
+        let label: String
+        let color: Color
+        
+        if isCancelled {
+            label = "Cancelled"
+            color = .gray
+        } else if isEnded {
+            label = "Ended"
+            color = .gray
+        } else if booking.status == .checkedIn {
+            label = "Active"
+            color = AppColors.success
+        } else {
+            label = timeUntilBooking(booking)
+            color = AppColors.success
+        }
         
         return HStack(spacing: 4) {
             Circle()
-                .fill(isEnded ? Color.gray : AppColors.success)
+                .fill(color)
                 .frame(width: 8, height: 8)
             
-            Text(isEnded ? "Ended" : (booking.status == .checkedIn ? "Active" : timeUntilBooking(booking)))
+            Text(label)
                 .font(AppFonts.caption)
-                .foregroundColor(isEnded ? .gray : AppColors.success)
+                .foregroundColor(color)
         }
         .padding(.horizontal, Spacing.sm)
         .padding(.vertical, Spacing.xs)
-        .background((isEnded ? Color.gray : AppColors.success).opacity(0.15))
+        .background(color.opacity(0.15))
         .clipShape(Capsule())
     }
     

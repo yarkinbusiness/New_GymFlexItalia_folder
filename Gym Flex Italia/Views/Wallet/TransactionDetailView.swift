@@ -169,6 +169,19 @@ struct TransactionDetailView: View {
             
             Divider().background(AppColors.border)
             TransactionDetailRow(label: "Balance After", value: "€\(String(format: "%.2f", txn.balanceAfter))")
+            
+            // Booking Total Paid (for booking-linked payment transactions)
+            if txn.type == .payment, let bookingId = txn.bookingId, !bookingId.isEmpty {
+                let bookingTotalPaidCents = WalletStore.shared.totalPaidCents(for: bookingId)
+                if bookingTotalPaidCents > 0 {
+                    Divider().background(AppColors.border)
+                    TransactionDetailRow(
+                        label: "Booking Total Paid",
+                        value: PricingCalculator.formatCentsAsEUR(bookingTotalPaidCents),
+                        icon: "eurosign.circle.fill"
+                    )
+                }
+            }
         }
         .glassBackground(cornerRadius: CornerRadii.lg)
     }

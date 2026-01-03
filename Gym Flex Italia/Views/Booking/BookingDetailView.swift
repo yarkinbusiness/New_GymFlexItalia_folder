@@ -272,8 +272,29 @@ struct BookingDetailView: View {
             
             Divider()
             
-            // Price
-            detailRow(label: "Total", value: String(format: "€%.2f", booking.totalPrice), icon: "eurosign.circle")
+            // Price - uses totalPaidCents for accurate total including extensions
+            let paidCents = WalletStore.shared.totalPaidCents(for: booking.id)
+            let baseCents = Int((booking.totalPrice * 100).rounded())
+            let totalString = (paidCents > 0)
+                ? PricingCalculator.formatCentsAsEUR(paidCents)
+                : String(format: "€%.2f", booking.totalPrice)
+            let hasExtensions = paidCents > baseCents && baseCents > 0
+            
+            VStack(spacing: 0) {
+                detailRow(label: "Total", value: totalString, icon: "eurosign.circle")
+                
+                if hasExtensions {
+                    HStack {
+                        Spacer()
+                        Text("Includes extensions")
+                            .font(AppFonts.caption)
+                            .foregroundColor(.secondary)
+                            .italic()
+                    }
+                    .padding(.horizontal, Spacing.lg)
+                    .padding(.bottom, Spacing.sm)
+                }
+            }
             
             // Reference Code
             if let code = booking.checkinCode {

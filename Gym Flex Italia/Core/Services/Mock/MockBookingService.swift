@@ -79,7 +79,9 @@ final class MockBookingService: BookingServiceProtocol {
                 amountCents: bookingCostCents,
                 bookingRef: bookingRef,
                 gymName: gymName,
-                gymId: gymId
+                gymId: gymId,
+                bookingIdOverride: bookingId,
+                paymentTransactionIdOverride: bookingRef
             )
             print("💰 BOOKING FLOW: Wallet debited - new balance = €\(String(format: "%.2f", walletStore.balance))")
         } catch {

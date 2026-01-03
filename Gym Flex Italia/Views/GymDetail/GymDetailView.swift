@@ -14,7 +14,13 @@ struct GymDetailView: View {
     @StateObject private var viewModel = GymDetailViewModel()
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appContainer) private var appContainer
+    @EnvironmentObject var router: AppRouter
     @State private var showConfirmationAlert = false
+    
+    /// Insufficient balance alert state
+    @State private var showInsufficientBalanceAlert = false
+    @State private var insufficientBalanceRequired: Int = 0  // cents
+    @State private var insufficientBalanceAvailable: Int = 0 // cents
     
     var body: some View {
         ScrollView {
@@ -63,25 +69,19 @@ struct GymDetailView: View {
                                 Button("1 Hour - €\(String(format: "%.2f", (gym.pricePerHour)))") {
                                     DemoTapLogger.log("GymDetail.Book1Hour", context: "gymId: \(gym.id)")
                                     Task {
-                                        if await viewModel.bookGym(date: Date(), duration: 60, using: appContainer.bookingService) {
-                                            showConfirmationAlert = true
-                                        }
+                                        await attemptBooking(gym: gym, duration: 60)
                                     }
                                 }
                                 Button("1.5 Hours - €\(String(format: "%.2f", (gym.pricePerHour * 1.5)))") {
                                     DemoTapLogger.log("GymDetail.Book1.5Hours", context: "gymId: \(gym.id)")
                                     Task {
-                                        if await viewModel.bookGym(date: Date(), duration: 90, using: appContainer.bookingService) {
-                                            showConfirmationAlert = true
-                                        }
+                                        await attemptBooking(gym: gym, duration: 90)
                                     }
                                 }
                                 Button("2 Hours - €\(String(format: "%.2f", (gym.pricePerHour * 2)))") {
                                     DemoTapLogger.log("GymDetail.Book2Hours", context: "gymId: \(gym.id)")
                                     Task {
-                                        if await viewModel.bookGym(date: Date(), duration: 120, using: appContainer.bookingService) {
-                                            showConfirmationAlert = true
-                                        }
+                                        await attemptBooking(gym: gym, duration: 120)
                                     }
                                 }
                                 Button("Cancel", role: .cancel) {}
@@ -120,6 +120,55 @@ struct GymDetailView: View {
             // Fire success haptic when confirmation alert appears
             if isShowing {
                 HapticGate.successOnce(key: "booking_confirmed")
+            }
+        }
+        .alert("Insufficient Balance", isPresented: $showInsufficientBalanceAlert) {
+            Button("Top Up Wallet") {
+                DemoTapLogger.log("GymDetail.InsufficientBalance.TopUp")
+                router.pushWallet()
+            }
+            Button("Cancel", role: .cancel) {
+                DemoTapLogger.log("GymDetail.InsufficientBalance.Cancel")
+            }
+        } message: {
+            let required = String(format: "€%.2f", Double(insufficientBalanceRequired) / 100.0)
+            let available = String(format: "€%.2f", Double(insufficientBalanceAvailable) / 100.0)
+            Text("You don't have enough balance to complete this booking.\n\nRequired: \(required)\nAvailable: \(available)")
+        }
+    }
+    
+    // MARK: - Booking Helper
+    
+    /// Attempt to book with balance pre-check
+    private func attemptBooking(gym: Gym, duration: Int) async {
+        // Calculate cost
+        let costCents = PricingCalculator.priceForBooking(
+            durationMinutes: duration,
+            gymPricePerHour: gym.pricePerHour
+        )
+        
+        // Check wallet balance BEFORE attempting booking
+        let walletStore = WalletStore.shared
+        let availableBalance = walletStore.balanceCents
+        
+        if availableBalance < costCents {
+            // Show insufficient balance alert
+            insufficientBalanceRequired = costCents
+            insufficientBalanceAvailable = availableBalance
+            showInsufficientBalanceAlert = true
+            print("⚠️ GymDetailView: Insufficient balance for booking. Required: \(costCents), Available: \(availableBalance)")
+            return
+        }
+        
+        // Proceed with booking
+        if await viewModel.bookGym(date: Date(), duration: duration, using: appContainer.bookingService) {
+            showConfirmationAlert = true
+        } else {
+            // Check if error was insufficient funds (edge case - shouldn't happen since we pre-checked)
+            if let error = viewModel.errorMessage, error.contains("Insufficient") {
+                insufficientBalanceRequired = costCents
+                insufficientBalanceAvailable = walletStore.balanceCents
+                showInsufficientBalanceAlert = true
             }
         }
     }

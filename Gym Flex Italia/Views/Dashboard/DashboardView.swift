@@ -22,6 +22,11 @@ struct DashboardView: View {
     
     @Environment(\.gfTheme) private var theme
     
+    /// Insufficient balance alert state
+    @State private var showInsufficientBalanceAlert = false
+    @State private var insufficientBalanceRequired: Int = 0  // cents
+    @State private var insufficientBalanceAvailable: Int = 0 // cents
+    
     var body: some View {
         ZStack {
             // Layered background (surface0 = deepest layer)
@@ -63,7 +68,8 @@ struct DashboardView: View {
             }
             .refreshable {
                 viewModel.load()
-                locationService.startIfAuthorized()
+                // Use resilient location acquisition on appear
+                await locationService.ensureFreshLocation(reason: "onAppear")
                 viewModel.refreshNearbyGyms(userLocation: locationService.currentLocation)
             }
             
@@ -73,12 +79,35 @@ struct DashboardView: View {
         }
         .task {
             viewModel.load()
-            // Try to start location if already authorized (first-time or returning user)
-            locationService.startIfAuthorized()
+            // Use resilient location acquisition on first load
+            await locationService.ensureFreshLocation(reason: "task")
             viewModel.refreshNearbyGyms(userLocation: locationService.currentLocation)
         }
         .onChange(of: locationService.currentLocation) { _, newLocation in
             viewModel.refreshNearbyGyms(userLocation: newLocation)
+        }
+        .onChange(of: locationService.authorizationStatus) { _, newStatus in
+            // CRITICAL: When authorization status changes (e.g., user grants permission),
+            // use ensureFreshLocation for resilient acquisition
+            #if DEBUG
+            print("📍 DashboardView: Authorization changed to \(newStatus.rawValue)")
+            #endif
+            
+            switch newStatus {
+            case .authorizedWhenInUse, .authorizedAlways:
+                viewModel.locationPermissionGranted = true
+                // Use resilient location acquisition
+                Task {
+                    await locationService.ensureFreshLocation(reason: "authChanged")
+                    viewModel.refreshNearbyGyms(userLocation: locationService.currentLocation)
+                }
+            case .denied, .restricted:
+                viewModel.locationPermissionGranted = false
+            case .notDetermined:
+                break
+            @unknown default:
+                break
+            }
         }
         .onChange(of: scenePhase) { _, newPhase in
             // When app returns from Settings, refresh location permission
@@ -86,8 +115,11 @@ struct DashboardView: View {
                 #if DEBUG
                 print("📍 DashboardView: App became active, refreshing location...")
                 #endif
-                locationService.startIfAuthorized()
-                viewModel.refreshNearbyGyms(userLocation: locationService.currentLocation)
+                // Use resilient location acquisition
+                Task {
+                    await locationService.ensureFreshLocation(reason: "sceneActive")
+                    viewModel.refreshNearbyGyms(userLocation: locationService.currentLocation)
+                }
             }
         }
         .alert("Booking Error", isPresented: Binding(
@@ -99,6 +131,19 @@ struct DashboardView: View {
             }
         } message: {
             Text(viewModel.errorMessage ?? "")
+        }
+        .alert("Insufficient Balance", isPresented: $showInsufficientBalanceAlert) {
+            Button("Top Up Wallet") {
+                DemoTapLogger.log("Dashboard.InsufficientBalance.TopUp")
+                router.pushWallet()
+            }
+            Button("Cancel", role: .cancel) {
+                DemoTapLogger.log("Dashboard.InsufficientBalance.Cancel")
+            }
+        } message: {
+            let required = String(format: "€%.2f", Double(insufficientBalanceRequired) / 100.0)
+            let available = String(format: "€%.2f", Double(insufficientBalanceAvailable) / 100.0)
+            Text("You don't have enough balance to complete this booking.\n\nRequired: \(required)\nAvailable: \(available)")
         }
     }
     
@@ -248,6 +293,25 @@ struct DashboardView: View {
             
             // If we have a last booking, book at the same gym
             if let lastBooking = viewModel.lastUserBooking {
+                // Calculate cost
+                let costCents = PricingCalculator.priceForBooking(
+                    durationMinutes: duration,
+                    gymPricePerHour: lastBooking.pricePerHour
+                )
+                
+                // Check wallet balance BEFORE attempting booking
+                let walletStore = WalletStore.shared
+                let availableBalance = walletStore.balanceCents
+                
+                if availableBalance < costCents {
+                    // Show insufficient balance alert
+                    insufficientBalanceRequired = costCents
+                    insufficientBalanceAvailable = availableBalance
+                    showInsufficientBalanceAlert = true
+                    print("⚠️ DashboardView: Insufficient balance for booking. Required: \(costCents), Available: \(availableBalance)")
+                    return
+                }
+                
                 do {
                     let _ = try await appContainer.bookingService.createBooking(
                         gymId: lastBooking.gymId,
@@ -258,7 +322,14 @@ struct DashboardView: View {
                     viewModel.load()
                     router.switchToTab(.checkIn)
                 } catch {
-                    viewModel.errorMessage = error.localizedDescription
+                    // Check if it's an insufficient funds error (shouldn't happen since we pre-checked)
+                    if error.localizedDescription.contains("Insufficient") {
+                        insufficientBalanceRequired = costCents
+                        insufficientBalanceAvailable = walletStore.balanceCents
+                        showInsufficientBalanceAlert = true
+                    } else {
+                        viewModel.errorMessage = error.localizedDescription
+                    }
                 }
             } else {
                 // No last booking - navigate to Discover
@@ -285,10 +356,9 @@ struct DashboardView: View {
                 .foregroundColor(AppColors.brand)
             }
             
-            // Location permission banner if needed
-            if !viewModel.locationPermissionGranted && locationService.authorizationStatus != .authorizedWhenInUse && locationService.authorizationStatus != .authorizedAlways {
-                locationBanner
-            }
+            // Location issue banner (shown when there's a locationIssue)
+            // Banner is @ViewBuilder and only renders content when locationIssue != nil
+            locationBanner
             
             VStack(spacing: Spacing.sm) {
                 if !viewModel.nearbyGyms.isEmpty {
@@ -309,39 +379,49 @@ struct DashboardView: View {
         }
     }
     
-    /// Location permission banner
+    /// Location issue banner with dynamic guidance
+    @ViewBuilder
     private var locationBanner: some View {
-        HStack(spacing: Spacing.sm) {
-            Image(systemName: "location.slash.fill")
-                .foregroundColor(AppColors.warning)
-            
-            Text("Enable location to see nearest gyms")
-                .font(AppFonts.bodySmall)
-                .foregroundColor(Color(.secondaryLabel))
-            
-            Spacer()
-            
-            Button(locationButtonLabel) {
-                locationService.handleEnableLocationTapped()
+        if let issue = locationService.locationIssue {
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                HStack(spacing: Spacing.sm) {
+                    Image(systemName: issue == .authorizedButNoFix ? "location.fill.viewfinder" : "location.slash.fill")
+                        .foregroundColor(issue == .authorizedButNoFix ? AppColors.brand : AppColors.warning)
+                    
+                    Text(issue.userGuidance)
+                        .font(AppFonts.bodySmall)
+                        .foregroundColor(Color(.secondaryLabel))
+                        .fixedSize(horizontal: false, vertical: true)
+                    
+                    Spacer()
+                }
+                
+                HStack(spacing: Spacing.sm) {
+                    Spacer()
+                    
+                    // Retry button for authorizedButNoFix
+                    if issue == .authorizedButNoFix {
+                        Button("Retry") {
+                            Task {
+                                await locationService.ensureFreshLocation(reason: "RetryButton")
+                            }
+                        }
+                        .font(AppFonts.caption)
+                        .foregroundColor(AppColors.secondary)
+                    }
+                    
+                    Button(issue.buttonLabel) {
+                        locationService.handleEnableLocationTapped()
+                    }
+                    .font(AppFonts.caption)
+                    .foregroundColor(AppColors.brand)
+                }
             }
-            .font(AppFonts.caption)
-            .foregroundColor(AppColors.brand)
-        }
-        .padding(Spacing.sm)
-        .background(AppColors.warning.opacity(0.1))
-        .cornerRadius(CornerRadii.sm)
-    }
-    
-    /// Dynamic button label based on permission status
-    private var locationButtonLabel: String {
-        switch locationService.authorizationStatus {
-        case .denied, .restricted:
-            return "Open Settings"
-        case .notDetermined:
-            return "Enable Location"
-        default:
-            // Banner hidden when authorized; empty fallback for safety
-            return ""
+            .padding(Spacing.sm)
+            .background(
+                (issue == .authorizedButNoFix ? AppColors.brand : AppColors.warning).opacity(0.1)
+            )
+            .cornerRadius(CornerRadii.sm)
         }
     }
     
@@ -529,13 +609,40 @@ struct RecentActivityCard: View {
             }
         }
         .padding(Spacing.md)
-        .background(isOngoing ? AppColors.success.opacity(0.08) : Color(.secondarySystemBackground))
+        .background(cardBackground)
         .cornerRadius(CornerRadii.md)
         .overlay(
             RoundedRectangle(cornerRadius: CornerRadii.md)
-                .stroke(isOngoing ? AppColors.success.opacity(0.3) : Color.clear, lineWidth: 1)
+                .stroke(cardBorderColor, lineWidth: 1)
         )
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+    
+    /// Computed property to check if session is in "ended" state (not ongoing, not cancelled)
+    private var isEnded: Bool {
+        !isOngoing && booking.status != .cancelled
+    }
+    
+    /// Background color for the card
+    private var cardBackground: Color {
+        if isOngoing {
+            return AppColors.success.opacity(0.08)
+        } else if isEnded {
+            return AppColors.danger.opacity(0.06)
+        } else {
+            return Color(.secondarySystemBackground)
+        }
+    }
+    
+    /// Border color for the card
+    private var cardBorderColor: Color {
+        if isOngoing {
+            return AppColors.success.opacity(0.3)
+        } else if isEnded {
+            return AppColors.danger.opacity(0.2)
+        } else {
+            return Color.clear
+        }
     }
     
     private var formattedDate: String {
@@ -553,16 +660,22 @@ struct RecentActivityCard: View {
     }
     
     private var formattedPrice: String {
+        // Show total paid from wallet (initial + extensions)
+        let paidCents = WalletStore.shared.totalPaidCents(for: booking.id)
+        if paidCents > 0 {
+            return PricingCalculator.formatCentsAsEUR(paidCents)
+        }
+        
+        // Fallback to booking.totalPrice or calculated price
         if booking.totalPrice > 0 {
             return String(format: "€%.2f", booking.totalPrice)
         }
-        // Fallback calculation
         let totalCents = PricingCalculator.priceForBooking(durationMinutes: booking.duration, gymPricePerHour: booking.pricePerHour)
         return PricingCalculator.formatCentsAsEUR(totalCents)
     }
     
     private var statusBadge: some View {
-        Text(isOngoing ? "Ongoing" : booking.status.displayName)
+        Text(statusLabel)
             .font(AppFonts.caption)
             .fontWeight(isOngoing ? .semibold : .regular)
             .foregroundColor(statusColor)
@@ -574,22 +687,32 @@ struct RecentActivityCard: View {
             )
     }
     
+    /// Status label based on booking state
+    /// Rules:
+    /// - Active (Ongoing): "Ongoing" (green)
+    /// - Cancelled: "Cancelled" (gray)
+    /// - All other ended/non-active: "Session Ended" (red)
+    /// - Never show "Checked In" to user
+    private var statusLabel: String {
+        if isOngoing {
+            return "Ongoing"
+        }
+        if booking.status == .cancelled {
+            return "Cancelled"
+        }
+        // All other non-active sessions (completed, checkedIn but ended, etc.) -> "Session Ended"
+        return "Session Ended"
+    }
+    
     private var statusColor: Color {
         if isOngoing {
             return AppColors.success
         }
         switch booking.status {
-        case .completed:
-            return AppColors.success
         case .cancelled:
-            return AppColors.danger
-        case .checkedIn:
-            return AppColors.brand
-        case .confirmed:
-            return AppColors.accent
-        case .pending:
-            return AppColors.warning
-        case .noShow:
+            return .gray  // Neutral gray tone for cancelled
+        default:
+            // All ended sessions use red styling
             return AppColors.danger
         }
     }

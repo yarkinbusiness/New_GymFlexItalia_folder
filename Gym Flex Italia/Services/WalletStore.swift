@@ -72,7 +72,86 @@ final class WalletStore: ObservableObject {
         !transactions.isEmpty
     }
     
+    // MARK: - Ledger Integrity Helpers
+    
+    /// Calculate signed amount in cents for a transaction
+    /// - Positive for credits (deposits, refunds, bonuses)
+    /// - Negative for debits (payments, withdrawals, penalties)
+    /// - Zero for pending/failed/cancelled transactions
+    func signedAmountCents(_ tx: WalletTransaction) -> Int {
+        guard tx.status == .completed else {
+            return 0  // Non-completed transactions don't affect balance
+        }
+        
+        let amountCents = Int((tx.amount * 100.0).rounded())
+        
+        switch tx.type {
+        case .deposit, .refund, .bonus:
+            return amountCents  // Credits add to balance
+        case .payment, .withdrawal, .penalty:
+            return -amountCents  // Debits subtract from balance
+        }
+    }
+    
+    /// Compute expected balance from completed transactions
+    /// Starting from initial demo balance (€45.00 = 4500 cents)
+    private var computedBalanceCents: Int {
+        let initialBalance = 4500  // Demo starting balance in cents
+        return transactions.reduce(initialBalance) { total, tx in
+            total + signedAmountCents(tx)
+        }
+    }
+    
+    /// Check if a duplicate transaction exists for the given paymentTransactionId
+    func hasDuplicateTransaction(paymentTransactionId: String) -> Bool {
+        return transactions.contains { tx in
+            tx.paymentTransactionId == paymentTransactionId &&
+            tx.status == .completed
+        }
+    }
+    
+    /// Find existing transaction by paymentTransactionId
+    func existingTransaction(paymentTransactionId: String) -> WalletTransaction? {
+        return transactions.first { tx in
+            tx.paymentTransactionId == paymentTransactionId &&
+            tx.status == .completed
+        }
+    }
+    
+    // MARK: - Ledger Validation (DEBUG)
+    
+    /// Validate ledger integrity (DEBUG only)
+    /// Checks that stored balance matches computed balance from transactions
+    /// - Parameter context: Description of where validation is being called
+    func validateLedgerIntegrity(context: String) {
+        #if DEBUG
+        let computed = computedBalanceCents
+        let stored = balanceCents
+        
+        if computed != stored {
+            let diff = stored - computed
+            print("⚠️ LEDGER MISMATCH [\(context)]: stored=\(stored)¢ computed=\(computed)¢ diff=\(diff)¢")
+            print("   Transactions: \(transactions.count)")
+            
+            // Log last 5 transactions for debugging
+            for (i, tx) in transactions.prefix(5).enumerated() {
+                print("   [\(i)] \(tx.type.rawValue) \(signedAmountCents(tx))¢ status=\(tx.status.rawValue) id=\(tx.paymentTransactionId ?? "nil")")
+            }
+            
+            // Only assert if migration was already attempted (meaning real bug, not stale data)
+            let migrationKey = "wallet_ledger_migrated_v1"
+            if UserDefaults.standard.bool(forKey: migrationKey) {
+                assertionFailure("Ledger integrity violation (post-migration): \(context)")
+            }
+        } else {
+            print("✅ LEDGER OK [\(context)]: \(stored)¢ = €\(String(format: "%.2f", Double(stored) / 100.0))")
+        }
+        #endif
+    }
+    
     // MARK: - Initialization
+    
+    private static let migrationKey = "wallet_ledger_migrated_v1"
     
     private init() {
         load()
@@ -82,7 +161,40 @@ final class WalletStore: ObservableObject {
             seedDemoTransactions()
         }
         
+        // DEBUG-only: Auto-heal ledger mismatch from old persisted data
+        #if DEBUG
+        performLedgerMigrationIfNeeded()
+        #endif
+        
         print("💰 WalletStore.init: balance=€\(String(format: "%.2f", balance)) transactions=\(transactions.count)")
+        validateLedgerIntegrity(context: "init")
+    }
+    
+    /// DEBUG-only: Detect and repair ledger mismatch from stale persisted data
+    private func performLedgerMigrationIfNeeded() {
+        #if DEBUG
+        let computed = computedBalanceCents
+        let stored = balanceCents
+        
+        if computed != stored {
+            if !UserDefaults.standard.bool(forKey: Self.migrationKey) {
+                // First-time mismatch: auto-repair
+                print("🧯 WALLET MIGRATION v1: fixing stored balance to match computed ledger.")
+                print("   stored=\(stored)¢ → computed=\(computed)¢")
+                balanceCents = computed
+                save()
+                UserDefaults.standard.set(true, forKey: Self.migrationKey)
+                print("🧯 WALLET MIGRATION v1: repair complete, flag set.")
+            } else {
+                // Migration already done but still mismatched = real bug
+                print("⚠️ WALLET: ledger mismatch persists AFTER migration flag. This is a real bug!")
+                print("   stored=\(stored)¢ computed=\(computed)¢ diff=\(stored - computed)¢")
+            }
+        } else if !UserDefaults.standard.bool(forKey: Self.migrationKey) {
+            // No mismatch and no migration needed, but mark as migrated for future
+            UserDefaults.standard.set(true, forKey: Self.migrationKey)
+        }
+        #endif
     }
     
     // MARK: - Persistence
@@ -129,9 +241,15 @@ final class WalletStore: ObservableObject {
     ///   - amountCents: Amount to add in cents
     ///   - ref: Reference code for the transaction
     ///   - method: Payment method used (optional)
-    /// - Returns: The created transaction
+    /// - Returns: The created transaction (or existing if duplicate)
     @discardableResult
     func applyTopUp(amountCents: Int, ref: String, method: PaymentMethod? = nil) -> WalletTransaction {
+        // Idempotency check: return existing transaction if duplicate
+        if let existing = existingTransaction(paymentTransactionId: ref) {
+            print("💰 WalletStore.applyTopUp: Duplicate prevented, returning existing tx ref=\(ref)")
+            return existing
+        }
+        
         let balanceBefore = balance
         balanceCents += amountCents
         let balanceAfter = balance
@@ -160,8 +278,29 @@ final class WalletStore: ObservableObject {
         save()
         
         print("💰 WalletStore.applyTopUp: +€\(String(format: "%.2f", Double(amountCents) / 100.0)) → €\(String(format: "%.2f", balanceAfter))")
+        validateLedgerIntegrity(context: "applyTopUp")
         
         return transaction
+    }
+    
+    // MARK: - Total Paid Calculation
+    
+    /// Calculate total paid for a booking (initial + all extensions)
+    /// - Parameter bookingId: The booking ID to calculate total for
+    /// - Returns: Total paid in cents
+    func totalPaidCents(for bookingId: String) -> Int {
+        let relatedPayments = transactions.filter { tx in
+            tx.type == .payment &&
+            tx.bookingId == bookingId &&
+            tx.status == .completed
+        }
+        
+        // Sum all payment amounts (stored as positive values in cents)
+        let totalCents = relatedPayments.reduce(0) { total, tx in
+            total + Int((tx.amount * 100.0).rounded())
+        }
+        
+        return max(0, totalCents)
     }
     
     // MARK: - Debit for Booking
@@ -172,13 +311,40 @@ final class WalletStore: ObservableObject {
     ///   - bookingRef: Booking reference code
     ///   - gymName: Name of the gym
     ///   - gymId: ID of the gym (optional)
-    /// - Returns: The created transaction
+    ///   - bookingIdOverride: Real booking ID for stable linkage (optional, defaults to "booking_\(bookingRef)")
+    ///   - paymentTransactionIdOverride: Payment transaction ID override (optional, defaults to bookingRef)
+    /// - Returns: The created transaction (or existing if duplicate)
     /// - Throws: WalletServiceError.insufficientFunds if balance is too low
     @discardableResult
-    func applyDebitForBooking(amountCents: Int, bookingRef: String, gymName: String, gymId: String? = nil) throws -> WalletTransaction {
-        // Check sufficient balance
+    func applyDebitForBooking(
+        amountCents: Int,
+        bookingRef: String,
+        gymName: String,
+        gymId: String? = nil,
+        bookingIdOverride: String? = nil,
+        paymentTransactionIdOverride: String? = nil
+    ) throws -> WalletTransaction {
+        // Use overrides for stable booking linkage (extensions link to same booking)
+        let stableBookingId = bookingIdOverride ?? "booking_\(bookingRef)"
+        let txRef = paymentTransactionIdOverride ?? bookingRef
+        
+        // Idempotency check: return existing transaction if duplicate
+        // This prevents double-charges from double-taps
+        // Note: Extensions use unique paymentTransactionIdOverride, so they won't be blocked
+        if let existing = existingTransaction(paymentTransactionId: txRef) {
+            print("💰 WalletStore.applyDebitForBooking: Duplicate prevented, returning existing tx ref=\(txRef)")
+            return existing
+        }
+        
+        // Invariant 5: No negative balances
         guard balanceCents >= amountCents else {
             print("❌ WalletStore.applyDebitForBooking: Insufficient balance (have €\(String(format: "%.2f", balance)), need €\(String(format: "%.2f", Double(amountCents) / 100.0)))")
+            throw WalletServiceError.insufficientFunds
+        }
+        
+        // Additional safety: ensure we won't go negative
+        guard balanceCents - amountCents >= 0 else {
+            print("❌ WalletStore.applyDebitForBooking: Would result in negative balance!")
             throw WalletServiceError.insufficientFunds
         }
         
@@ -193,12 +359,12 @@ final class WalletStore: ObservableObject {
             amount: Double(amountCents) / 100.0,
             currency: currency,
             description: "Booking at \(gymName)",
-            bookingId: "booking_\(bookingRef)",
+            bookingId: stableBookingId,
             gymId: gymId,
             gymName: gymName,
             paymentMethod: .wallet,
             paymentProvider: nil,
-            paymentTransactionId: bookingRef,
+            paymentTransactionId: txRef,
             balanceBefore: balanceBefore,
             balanceAfter: balanceAfter,
             status: .completed,
@@ -209,7 +375,8 @@ final class WalletStore: ObservableObject {
         transactions.insert(transaction, at: 0)
         save()
         
-        print("💰 WalletStore.applyDebitForBooking: -€\(String(format: "%.2f", Double(amountCents) / 100.0)) for '\(gymName)' → €\(String(format: "%.2f", balanceAfter))")
+        print("💰 WalletStore.applyDebitForBooking: -€\(String(format: "%.2f", Double(amountCents) / 100.0)) for '\(gymName)' bookingId=\(stableBookingId) txRef=\(txRef) → €\(String(format: "%.2f", balanceAfter))")
+        validateLedgerIntegrity(context: "applyDebitForBooking")
         
         return transaction
     }
@@ -348,5 +515,12 @@ final class WalletStore: ObservableObject {
         ))
         
         print("💰 WalletStore: Seeded \(transactions.count) demo transactions")
+        
+        // LEDGER FIX: Keep stored balance consistent with ledger
+        // Ensures computedBalanceCents == balanceCents after seeding
+        balanceCents = computedBalanceCents
+        save()
+        
+        print("💰 WalletStore: Synced balance to €\(String(format: "%.2f", balance)) after seeding")
     }
 }

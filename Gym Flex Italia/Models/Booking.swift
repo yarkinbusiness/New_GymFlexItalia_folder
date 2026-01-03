@@ -116,8 +116,8 @@ enum BookingStatus: String, Codable {
         switch self {
         case .pending: return "Pending"
         case .confirmed: return "Confirmed"
-        case .checkedIn: return "Checked In"
-        case .completed: return "Completed"
+        case .checkedIn: return "Session Ended"  // User never sees "Checked In" - owner app concept
+        case .completed: return "Session Ended"
         case .cancelled: return "Cancelled"
         case .noShow: return "No Show"
         }

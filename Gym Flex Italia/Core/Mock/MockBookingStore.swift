@@ -165,6 +165,33 @@ final class MockBookingStore {
         return currentUserSession(now: now) != nil
     }
     
+    // MARK: - Session State Helpers (Single Source of Truth)
+    
+    /// Check if a session is currently active (not cancelled, not ended)
+    /// - Parameters:
+    ///   - booking: The booking to check
+    ///   - now: Current date (defaults to Date())
+    /// - Returns: true if session is active and not yet ended
+    func isSessionActive(_ booking: Booking, now: Date = Date()) -> Bool {
+        return booking.status != .cancelled && booking.endTime > now
+    }
+    
+    /// Check if a session has ended (time expired, not cancelled)
+    /// - Parameters:
+    ///   - booking: The booking to check
+    ///   - now: Current date (defaults to Date())
+    /// - Returns: true if session time has expired
+    func isSessionEnded(_ booking: Booking, now: Date = Date()) -> Bool {
+        return booking.status != .cancelled && booking.endTime <= now
+    }
+    
+    /// Check if a session was cancelled
+    /// - Parameter booking: The booking to check
+    /// - Returns: true if booking status is cancelled
+    func isSessionCancelled(_ booking: Booking) -> Bool {
+        return booking.status == .cancelled
+    }
+    
     // MARK: - Session Extension
     
     /// Extends a booking by adding minutes to its duration.
@@ -327,6 +354,10 @@ final class MockBookingStore {
         
         bookings[index] = updatedBooking
         save()
+        
+        // LEDGER INVARIANT 4: Cancel does NOT create a refund
+        // Product rule: no refunds - wallet balance remains unchanged
+        print("🚫 CANCEL: no refund policy enforced bookingId=\(bookingId)")
         print("❌ MockBookingStore.cancel: bookingId=\(bookingId)")
         return updatedBooking
     }

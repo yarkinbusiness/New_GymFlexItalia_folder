@@ -254,7 +254,12 @@ struct BookingCard: View {
     }
     
     private var formattedPrice: String {
-        String(format: "€%.2f", booking.totalPrice)
+        // Show total paid from wallet (initial + extensions)
+        let paidCents = WalletStore.shared.totalPaidCents(for: booking.id)
+        if paidCents > 0 {
+            return PricingCalculator.formatCentsAsEUR(paidCents)
+        }
+        return String(format: "€%.2f", booking.totalPrice)
     }
 }
 
