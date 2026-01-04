@@ -61,62 +61,8 @@ struct RootTabView: View {
                 .ignoresSafeArea(edges: .bottom)
             }
             .navigationDestination(for: AppRoute.self) { route in
-                switch route {
-                case .gymDetail(let gymId):
-                    GymDetailView(gymId: gymId)
-                case .groupDetail(let groupId):
-                    GroupChatView(groupId: groupId)
-                case .groupNotFound(let message):
-                    GroupInviteErrorView(message: message)
-                case .bookingHistory:
-                    BookingHistoryView()
-                case .bookingDetail(let bookingId):
-                    BookingDetailView(bookingId: bookingId)
-                case .editProfile:
-                    EditProfileView()
-                case .settings:
-                    SettingsView()
-                case .wallet:
-                    WalletFullView()
-                case .walletTransactionDetail(let transactionId):
-                    TransactionDetailView(transactionId: transactionId)
-                case .checkIn(let bookingId):
-                    CheckInView(bookingId: bookingId)
-                #if DEBUG
-                case .deepLinkSimulator:
-                    DeepLinkSimulatorView()
-                case .ownerMode:
-                    OwnerModeView()
-                #endif
-                case .paymentMethods:
-                    PaymentMethodsView()
-                case .addCard:
-                    AddCardView()
-                case .accountSecurity:
-                    AccountSecurityView()
-                case .changePassword:
-                    ChangePasswordView()
-                case .devicesSessions:
-                    DevicesSessionsView()
-                case .deleteAccount:
-                    DeleteAccountView()
-                case .notificationsPreferences:
-                    NotificationsPreferencesView()
-                case .helpSupport:
-                    HelpSupportView()
-                case .faq:
-                    FAQView()
-                case .reportBug:
-                    ReportBugView()
-                case .terms:
-                    TermsPlaceholderView()
-                case .privacy:
-                    PrivacyPlaceholderView()
-                case .editAvatar:
-                    EditAvatarView()
-                case .updateGoals:
-                    UpdateGoalsView()
-                }
+                destinationView(for: route)
+                    .navigationMicroShift(lastNavAction: router.lastNavAction)
             }
             .task {
                 // Consume any pending deep links (e.g., from cold start notification)
@@ -126,6 +72,67 @@ struct RootTabView: View {
                 // Also consume when new deep links are enqueued while app is running
                 consumePendingDeepLinks()
             }
+        }
+    }
+    
+    /// Returns the destination view for a given route
+    @ViewBuilder
+    private func destinationView(for route: AppRoute) -> some View {
+        switch route {
+        case .gymDetail(let gymId):
+            GymDetailView(gymId: gymId)
+        case .groupDetail(let groupId):
+            GroupChatView(groupId: groupId)
+        case .groupNotFound(let message):
+            GroupInviteErrorView(message: message)
+        case .bookingHistory:
+            BookingHistoryView()
+        case .bookingDetail(let bookingId):
+            BookingDetailView(bookingId: bookingId)
+        case .editProfile:
+            EditProfileView()
+        case .settings:
+            SettingsView()
+        case .wallet:
+            WalletFullView()
+        case .walletTransactionDetail(let transactionId):
+            TransactionDetailView(transactionId: transactionId)
+        case .checkIn(let bookingId):
+            CheckInView(bookingId: bookingId)
+        #if DEBUG
+        case .deepLinkSimulator:
+            DeepLinkSimulatorView()
+        case .ownerMode:
+            OwnerModeView()
+        #endif
+        case .paymentMethods:
+            PaymentMethodsView()
+        case .addCard:
+            AddCardView()
+        case .accountSecurity:
+            AccountSecurityView()
+        case .changePassword:
+            ChangePasswordView()
+        case .devicesSessions:
+            DevicesSessionsView()
+        case .deleteAccount:
+            DeleteAccountView()
+        case .notificationsPreferences:
+            NotificationsPreferencesView()
+        case .helpSupport:
+            HelpSupportView()
+        case .faq:
+            FAQView()
+        case .reportBug:
+            ReportBugView()
+        case .terms:
+            TermsPlaceholderView()
+        case .privacy:
+            PrivacyPlaceholderView()
+        case .editAvatar:
+            EditAvatarView()
+        case .updateGoals:
+            UpdateGoalsView()
         }
     }
     

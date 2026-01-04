@@ -38,6 +38,13 @@ enum AppRoute: Hashable {
     case ownerMode  // DEBUG-only: QR validation for gym owners
 }
 
+/// Tracks the last navigation action direction for micro-shift animation
+enum NavAction {
+    case push
+    case pop
+    case reset
+}
+
 /// Central navigation state owner for consistent navigation across the app
 /// Inject via @EnvironmentObject at RootNavigationView level
 ///
@@ -63,6 +70,9 @@ final class AppRouter: ObservableObject {
             syncRouteStackWithPath()
         }
     }
+    
+    /// Tracks the last navigation action (push/pop/reset) for micro-shift animation
+    @Published private(set) var lastNavAction: NavAction = .push
     
     /// Tracks routes in the current navigation path for idempotency checks
     /// NavigationPath doesn't expose its contents, so we mirror it here
@@ -128,8 +138,11 @@ final class AppRouter: ObservableObject {
     /// Pop the top view from the navigation stack
     func pop() {
         guard !path.isEmpty else { return }
+        lastNavAction = .pop
         isSyncingFromPath = true
-        path.removeLast()
+        withAnimation(GFMotion.navigationIfAllowed) {
+            path.removeLast()
+        }
         _ = routeStack.popLast()
         isSyncingFromPath = false
         validateStackSync()
@@ -137,8 +150,11 @@ final class AppRouter: ObservableObject {
     
     /// Reset navigation to root (clear entire stack)
     func resetToRoot() {
+        lastNavAction = .reset
         isSyncingFromPath = true
-        path = NavigationPath()
+        withAnimation(GFMotion.navigationIfAllowed) {
+            path = NavigationPath()
+        }
         routeStack.removeAll()
         isSyncingFromPath = false
         validateStackSync()
@@ -252,8 +268,11 @@ final class AppRouter: ObservableObject {
     
     /// Appends a route to the navigation stack and tracks it
     private func appendRoute(_ route: AppRoute) {
+        lastNavAction = .push
         isSyncingFromPath = true
-        path.append(route)
+        withAnimation(GFMotion.navigationIfAllowed) {
+            path.append(route)
+        }
         routeStack.append(route)
         isSyncingFromPath = false
         validateStackSync()

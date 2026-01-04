@@ -317,49 +317,15 @@ struct GroupChatView: View {
     // MARK: - Message Input
     
     private var messageInputView: some View {
-        HStack(spacing: Spacing.sm) {
-            // Text Field
-            TextField("Type a message...", text: $viewModel.messageText)
-                .font(AppFonts.body)
-                .padding(.horizontal, Spacing.md)
-                .padding(.vertical, Spacing.sm)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: CornerRadii.lg))
-                .focused($isInputFocused)
-            
-            // Send Button
-            Button {
+        ChatComposerView(
+            messageText: $viewModel.messageText,
+            isSending: viewModel.isSending,
+            onSend: {
                 Task {
                     _ = await viewModel.sendMessage(using: appContainer.groupsChatService)
                     // Auto-scroll happens via onChange
                 }
-            } label: {
-                ZStack {
-                    Circle()
-                        .fill(viewModel.messageText.isEmpty ? Color.gray.opacity(0.3) : AppColors.brand)
-                        .frame(width: 40, height: 40)
-                    
-                    if viewModel.isSending {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(0.8)
-                    } else {
-                        Image(systemName: "paperplane.fill")
-                            .font(.system(size: 16))
-                            .foregroundColor(.white)
-                    }
-                }
             }
-            .disabled(viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isSending)
-        }
-        .padding(.horizontal, Spacing.md)
-        .padding(.vertical, Spacing.sm)
-        .background(Color(.systemBackground))
-        .overlay(
-            Rectangle()
-                .fill(Color(.separator))
-                .frame(height: 0.5),
-            alignment: .top
         )
     }
 }

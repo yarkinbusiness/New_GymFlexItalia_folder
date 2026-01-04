@@ -10,6 +10,10 @@
 	<string>GymFlex needs camera access for QR code scanning at gym check-in.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>GymFlex needs access to your photos to update your profile picture.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>GymFlex needs microphone access for voice dictation in group chats.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>GymFlex uses speech recognition to convert your voice to text in group chats.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
